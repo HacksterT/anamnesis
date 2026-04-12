@@ -41,7 +41,12 @@ def load_config(config_path: str | Path | None = None) -> KnowledgeConfig:
         if key in data and isinstance(data[key], str):
             data[key] = Path(data[key])
 
-    return KnowledgeConfig(**data)
+    # Strip fields that aren't KnowledgeConfig parameters
+    import dataclasses
+    valid_fields = {f.name for f in dataclasses.fields(KnowledgeConfig)}
+    config_data = {k: v for k, v in data.items() if k in valid_fields}
+
+    return KnowledgeConfig(**config_data)
 
 
 def _resolve_path(config_path: str | Path | None) -> Path | None:

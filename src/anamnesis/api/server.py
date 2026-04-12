@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
@@ -33,18 +34,48 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class TurnCapture(BaseModel):
+    role: str
+    content: str
+
+
+class SessionEnd(BaseModel):
+    summary: str | None = None
+    agent: str | None = None
+
+
+class AgentCreate(BaseModel):
+    name: str
+    token_budget: int = 4000
+    recency_budget: int = 400
+
+
+class AgentUpdate(BaseModel):
+    token_budget: int | None = None
+    recency_budget: int | None = None
+
+
 # ─── App factory ─────────────────────────────────────────────────
 
 
-def create_app(config: KnowledgeConfig) -> FastAPI:
+def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastAPI:
     """Create a FastAPI app wired to a KnowledgeFramework instance."""
 
     kf = KnowledgeFramework(config)
+    _config_path = config_path  # Stored for agent API access
 
     app = FastAPI(
         title="Anamnesis Knowledge API",
         description="Knowledge management for LLM agent systems.",
         version="0.1.0",
+    )
+
+    # ─── CORS (for dashboard dev server) ────────────────────
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5175", "http://localhost:4173"],
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     # ─── Auth middleware ──────────────────────────────────────
@@ -162,5 +193,133 @@ def create_app(config: KnowledgeConfig) -> FastAPI:
         except KeyError:
             raise HTTPException(status_code=404, detail=f"Bolus '{bolus_id}' not found")
         return Response(content=content, media_type="text/markdown")
+
+    # ─── Episode capture (Circle 4) ─────────────────────────────
+
+    @app.post("/v1/episodes/turn")
+    async def capture_turn(body: TurnCapture):
+        kf.capture_turn(body.role, body.content)
+        return {"status": "captured"}
+
+    @app.post("/v1/episodes/end")
+    async def end_session(body: SessionEnd | None = None):
+        summary = body.summary if body else None
+        agent = body.agent if body else None
+        session_id = kf.end_session(summary=summary, agent=agent)
+        if session_id is None:
+            return {"status": "no_session", "session_id": None}
+        return {"status": "ended", "session_id": session_id}
+
+    @app.get("/v1/episodes")
+    async def list_episodes(agent: str | None = None):
+        return kf.list_episodes(agent=agent)
+
+    @app.get("/v1/episodes/{session_id}")
+    async def get_episode(session_id: str):
+        try:
+            episode = kf.get_episode(session_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Episode '{session_id}' not found")
+        return {
+            "session_id": episode.session_id,
+            "agent": episode.agent,
+            "started": episode.started,
+            "ended": episode.ended,
+            "summary": episode.summary,
+            "turn_count": episode.turn_count,
+            "compiled": episode.compiled,
+            "turns": [
+                {"role": t.role, "content": t.content, "timestamp": t.timestamp, "sequence": t.sequence}
+                for t in episode.turns
+            ],
+        }
+
+    # ─── Agent registry ─────────────────────────────────────────
+
+    def _get_config_path():
+        """Resolve the config file path for agent operations."""
+        from pathlib import Path
+
+        if _config_path:
+            return Path(_config_path)
+        for name in ["anamnesis.yaml", "anamnesis.yml"]:
+            p = Path(name)
+            if p.exists():
+                return p
+        return None
+
+    @app.get("/v1/agents")
+    async def list_agents():
+        from anamnesis.init import load_project_config
+
+        cp = _get_config_path()
+        if cp is None:
+            return {}
+        project = load_project_config(cp)
+        return project.get("agents", {})
+
+    @app.get("/v1/agents/{name}")
+    async def get_agent(name: str):
+        from anamnesis.init import load_project_config
+
+        cp = _get_config_path()
+        if cp is None:
+            raise HTTPException(status_code=404, detail="No config file found")
+        project = load_project_config(cp)
+        agents = project.get("agents", {})
+        if name not in agents:
+            raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+        return {"name": name, **agents[name]}
+
+    @app.post("/v1/agents", status_code=201)
+    async def create_agent(body: AgentCreate):
+        from anamnesis.init import load_project_config, save_project_config
+
+        cp = _get_config_path()
+        if cp is None:
+            raise HTTPException(status_code=422, detail="No config file found")
+        project = load_project_config(cp)
+        agents = project.setdefault("agents", {})
+        if body.name in agents:
+            raise HTTPException(status_code=409, detail=f"Agent '{body.name}' already exists")
+        agents[body.name] = {
+            "token_budget": body.token_budget,
+            "recency_budget": body.recency_budget,
+        }
+        save_project_config(cp, project)
+        return {"name": body.name, "status": "created"}
+
+    @app.patch("/v1/agents/{name}")
+    async def update_agent(name: str, body: AgentUpdate):
+        from anamnesis.init import load_project_config, save_project_config
+
+        cp = _get_config_path()
+        if cp is None:
+            raise HTTPException(status_code=422, detail="No config file found")
+        project = load_project_config(cp)
+        agents = project.get("agents", {})
+        if name not in agents:
+            raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+        if body.token_budget is not None:
+            agents[name]["token_budget"] = body.token_budget
+        if body.recency_budget is not None:
+            agents[name]["recency_budget"] = body.recency_budget
+        save_project_config(cp, project)
+        return {"name": name, **agents[name]}
+
+    @app.delete("/v1/agents/{name}")
+    async def delete_agent(name: str):
+        from anamnesis.init import load_project_config, save_project_config
+
+        cp = _get_config_path()
+        if cp is None:
+            raise HTTPException(status_code=422, detail="No config file found")
+        project = load_project_config(cp)
+        agents = project.get("agents", {})
+        if name not in agents:
+            raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+        del agents[name]
+        save_project_config(cp, project)
+        return {"name": name, "status": "deleted"}
 
     return app

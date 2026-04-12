@@ -22,7 +22,14 @@ class KnowledgeConfig:
     # Storage backend discriminator (kept as string for serialization)
     bolus_store: str = "markdown"
 
-    # API server settings (used by S05)
+    # Circle 4 (episode capture)
+    circle4_root: Path | None = None
+    circle4_retention_days: int | None = None
+
+    # Recency pipeline
+    recency_budget: int = 0
+
+    # API server settings
     api_host: str = "127.0.0.1"
     api_port: int = 8741
     api_key: str | None = None
@@ -33,6 +40,8 @@ class KnowledgeConfig:
             self.circle1_path = Path(self.circle1_path)
         if isinstance(self.circle2_root, str):
             self.circle2_root = Path(self.circle2_root)
+        if isinstance(self.circle4_root, str):
+            self.circle4_root = Path(self.circle4_root)
 
         if self.circle1_max_tokens < 500:
             raise ValueError(

@@ -54,3 +54,12 @@ S01 and S02 are done. S03 is next. Each story depends on the prior.
 - PRDs follow the prd-creator skill format (F##/S## nomenclature). Templates in `/Users/hackstert/Atlas/.atlas/skills/prd-creator/references/`.
 - The user is a physician-builder (MD/MPH) who values clinical analogies. The framework uses medical metaphors extensively (medication reconciliation, problem list, bolus).
 - Prefer terse, direct communication. No trailing summaries.
+- **Port assignments must be requested through Atlas before use.** Do not hardcode or assume port numbers. Create a request in `docs/request-port.md` and wait for Atlas CTO approval before configuring any service ports. See `docs/request-port.md` for the current assignments and the process.
+
+## Assigned Ports
+
+| Port | Service | Notes |
+|------|---------|-------|
+| 8741 | Anamnesis REST API | Production + dev |
+| 5175 | Dashboard dev server | SvelteKit dev only |
+| 4173 | Dashboard preview | SvelteKit preview only |

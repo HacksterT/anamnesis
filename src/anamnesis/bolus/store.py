@@ -10,19 +10,23 @@ from anamnesis.bolus.base import BolusStore
 from anamnesis.bolus import frontmatter
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_SYSTEM_ID_RE = re.compile(r"^_[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 _REQUIRED_METADATA = {"id", "title", "active", "render", "summary", "created", "updated"}
 _VALID_RENDER_MODES = {"inline", "reference"}
 
 
 def validate_bolus_id(bolus_id: str) -> str:
-    """Validate and return a bolus ID, or raise ValueError."""
-    if not _SLUG_RE.match(bolus_id):
-        raise ValueError(
-            f"Invalid bolus ID {bolus_id!r}. "
-            "Must be lowercase alphanumeric with hyphens (e.g. 'my-bolus')."
-        )
-    return bolus_id
+    """Validate and return a bolus ID, or raise ValueError.
+
+    Accepts regular slugs (e.g. 'my-bolus') and system IDs (e.g. '_recency').
+    """
+    if _SLUG_RE.match(bolus_id) or _SYSTEM_ID_RE.match(bolus_id):
+        return bolus_id
+    raise ValueError(
+        f"Invalid bolus ID {bolus_id!r}. "
+        "Must be lowercase alphanumeric with hyphens (e.g. 'my-bolus')."
+    )
 
 
 def slugify(text: str) -> str:
