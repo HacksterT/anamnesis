@@ -1,0 +1,4 @@
+circle1_path: knowledge/anamnesis.md
+circle2_root: knowledge/boluses
+circle1_max_tokens: 4000
+agents: {}
