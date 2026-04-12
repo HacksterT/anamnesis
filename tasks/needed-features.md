@@ -1,6 +1,6 @@
 # Needed Features — Beyond Phase 1
 
-Phase 1 (S01–S05) delivers the library core: bolus CRUD, injection assembly, and a REST API. What's missing is the surface layer — how agents interact with the system programmatically, how humans manage it visually, and how new agents get onboarded.
+Phase 1 (S01–S05) delivers the library core: bolus CRUD, injection assembly (render model), and a REST API. What follows is the surface layer (CLI, dashboard), the agent onboarding model, and the conversation capture pipeline.
 
 ---
 
@@ -30,6 +30,7 @@ anamnesis serve                         # Start the REST API (from S05)
 
 anamnesis agent list                    # List onboarded agents
 anamnesis agent show <name>             # Show agent config + knowledge summary
+anamnesis agent recency <name> --budget 400   # Set recency token budget for agent
 ```
 
 **Design notes:**
@@ -47,23 +48,29 @@ The web UI is the human's tool for reviewing and managing knowledge. It makes th
 **Views:**
 
 ### Bolus Library
-- Card or table view of all boluses with title, summary, tags, active status, last updated
+- Card or table view of all boluses with title, summary, tags, render mode, active status, last updated
 - Toggle activation with a switch
 - Click to view/edit content in a markdown editor
-- Create new bolus via form
-- Filter by tag, category, active status
-- Sort by name, date, status
+- Create new bolus via form (with render mode and priority selection)
+- Filter by tag, render mode, active status
+- Sort by name, date, priority, status
 
 ### Injection Preview
 - Live-rendered view of the assembled `anamnesis.md`
 - Token count with budget bar (green/yellow/red)
-- Per-section breakdown
+- Inline vs reference breakdown
+- Recency slot budget indicator (see §4)
 - "Assemble now" button
 
 ### Agent Registry
 - List of onboarded agents with their config summaries
-- Per-agent view: which boluses are relevant, token budget, last assembly
+- Per-agent view: which boluses are active, token budget, recency budget, last assembly
 - Onboarding wizard (walks through `anamnesis init --agent`)
+
+### Budget Controls
+- **Recency token slider** — configurable per agent, sets how many tokens of the Circle 1 budget are reserved for recent conversation context (Circle 4 → Circle 1 pipeline). Adjustable in both the dashboard and the CLI.
+- Overall token budget configuration (soft max, hard ceiling)
+- Visual breakdown: how much of the budget is curated knowledge vs recency context
 
 ### Future (Phase 2+)
 - Curation queue (Circle 3 → Circle 2 reconciliation)
@@ -72,8 +79,7 @@ The web UI is the human's tool for reviewing and managing knowledge. It makes th
 
 **Design notes:**
 - Served from the same FastAPI process as the API (mounted at `/dashboard`)
-- Lightweight frontend — could be HTMX + Jinja templates or a small React/Svelte SPA
-- No separate frontend build step if using HTMX approach
+- Lightweight frontend — HTMX + Jinja templates (no separate build step)
 - Reads/writes through the same `/v1/` API endpoints
 
 ---
@@ -82,13 +88,15 @@ The web UI is the human's tool for reviewing and managing knowledge. It makes th
 
 When a new agent joins the Anamnesis system, it needs:
 
-1. **A config entry.** Which knowledge directory does it read from? What's its token budget? Which boluses are relevant? What's its permissiveness level?
+1. **A config entry.** Which knowledge directory does it read from? What's its total token budget? What's its recency budget? Which boluses does it activate?
 
-2. **A knowledge directory** (optional). Agents can share a knowledge directory (same boluses, same injection) or have isolated directories. Shared is the default — most agents reading from the same knowledge base is the common case. Isolated is for multi-tenant or domain-specific agents.
+2. **A knowledge directory** (optional). Agents can share a knowledge directory (same boluses, same injection) or have isolated directories. Shared is the default — most agents reading from the same knowledge base is the common case. Isolated is for domain-specific agents.
 
-3. **An injection profile.** Which sections of `anamnesis.md` does this agent get? A coding assistant might get Identity + Knowledge Domains + Capabilities. A voice agent might get Identity + Knowledge Domains + Current Context. The profile controls section inclusion.
+3. **A bolus activation profile.** Which boluses are active for this agent? In a shared knowledge directory, not every agent needs every bolus. A coding agent activates technical boluses. A philosophy agent activates different ones. The activation profile is per-agent.
 
-4. **Registration.** The agent is added to a registry (`anamnesis.yaml` or a `agents/` directory) so the system knows it exists and can serve its injection via the API (`GET /v1/knowledge/injection?agent=atlas`).
+4. **A recency budget.** How many tokens of the injection are reserved for recent conversation context? This is the Circle 4 → Circle 1 pipeline budget. Configurable per agent via a slider (dashboard) or flag (CLI).
+
+5. **Registration.** The agent is added to a registry so the system knows it exists and can serve its injection via the API (`GET /v1/knowledge/injection?agent=atlas`).
 
 **Onboarding flow:**
 
@@ -96,21 +104,116 @@ When a new agent joins the Anamnesis system, it needs:
 anamnesis init --agent atlas \
   --knowledge-dir knowledge/ \
   --token-budget 4000 \
-  --sections identity,domains,capabilities
+  --recency-budget 400
 ```
 
-This creates an agent config entry and (if needed) initializes the knowledge directory. The agent can then call:
+**Migration path for existing agents:**
 
-```
-GET /v1/knowledge/injection?agent=atlas
-```
+Atlas already has memories in its system. The onboarding process for an existing agent:
+1. `anamnesis init --agent atlas` — creates the agent config
+2. Migrate existing memories into boluses (manual or assisted — each memory becomes a bolus with appropriate render mode, priority, and tags)
+3. Activate relevant boluses for the agent
+4. Verify with `anamnesis assemble --agent atlas` and review the output
 
-And receive its tailored injection.
+Selah is a cold-start on a local Gemma 4 model. The onboarding process:
+1. `anamnesis init --agent selah` — creates the agent config
+2. Create boluses from scratch (identity, domain knowledge, constraints)
+3. The `retrieve_knowledge` tool must work with Selah's local model framework (not just cloud APIs)
 
 **Multi-agent model:**
-- Default: all agents share `knowledge/` — one bolus library, one injection template
+- Default: all agents share `knowledge/` — one bolus library, per-agent activation profiles
 - Override: per-agent knowledge dirs for isolation
-- Hybrid: shared bolus library, per-agent section profiles (most likely pattern)
+- Hybrid: shared bolus library, per-agent activation + recency budgets (most likely pattern)
+
+---
+
+## 4. Conversation Capture & Recency Pipeline (Circle 4 → Circle 1)
+
+**The problem:** Anamnesis manages curated, durable knowledge. But agents also need recent conversation context — what happened in the last session, what's being worked on right now. Claude Code handles this internally (conversation history, context compression). Custom agents like Atlas and Selah do not.
+
+**The solution:** Circle 4 captures raw conversation episodes. A recency pipeline automatically surfaces the most recent context into Circle 1 as a dedicated inline bolus with a capped token budget.
+
+### Architecture
+
+```
+Conversation turns
+    │
+    ▼
+Circle 4 (episode storage)
+    │
+    ├─→ Recency slot in Circle 1 (automatic, capped, FIFO)
+    │     - Rendered as an inline bolus (render: inline, high priority)
+    │     - Fixed token budget per agent (configurable via slider)
+    │     - Most recent context replaces oldest — no accumulation
+    │     - Updated after each session or on-demand
+    │
+    └─→ Compilation pipeline (Phase 3, slower, curated)
+          - Extracts durable facts from episodes
+          - Routes to Circle 3 for review
+          - Confirmed facts become permanent boluses in Circle 2
+```
+
+### Recency Token Budget
+
+The recency slot has its own token budget *within* the overall Circle 1 budget. This is the key constraint that prevents context stuffing.
+
+| Setting | Default | Range | Controlled By |
+|---------|---------|-------|---------------|
+| `recency_budget` | 400 tokens | 0–1000 tokens | Slider in dashboard, flag in CLI, field in agent config |
+
+Example: if the agent's total Circle 1 budget is 4,000 tokens and the recency budget is 400, then 3,600 tokens are available for curated boluses and 400 for recent context.
+
+Setting `recency_budget: 0` disables the recency pipeline entirely — useful for agents that don't need session continuity or that handle context externally (like Claude Code).
+
+### Capture API
+
+```python
+kf.capture_turn(role="user", content="Let's work on the Anamnesis S04 story.")
+kf.capture_turn(role="assistant", content="I'll start with the assembler...")
+
+# End of session — updates the recency slot
+kf.end_session(summary="Implemented injection assembly. 75 tests passing.")
+
+# Or let the system auto-summarize from captured turns
+kf.end_session()  # auto-generates summary from Circle 4 episodes
+```
+
+### Design Notes
+
+- The recency bolus is a system-managed inline bolus. It has `render: inline` and a reserved priority (e.g., priority 25 — after identity, before general knowledge). The user doesn't create or edit it directly.
+- Auto-summarization of sessions requires an LLM call. For Phase 2, this could be a lightweight call (Haiku/Flash) or a simple heuristic (last N turns truncated to budget). The `CompletionProvider` interface deferred from Phase 1 becomes relevant here.
+- Episode retention is configurable (`circle4_retention_days` in config). Recency is ephemeral; episodes are the raw record.
+
+---
+
+## 5. Memory Migration Tooling
+
+For agents with existing memory systems (like Atlas), Anamnesis needs a migration path.
+
+### Atlas Migration
+
+Atlas's current memory lives in `~/.claude/` as auto-memory markdown files. Each file maps roughly to a bolus:
+
+```
+anamnesis migrate atlas \
+  --source ~/.claude/projects/*/memory/ \
+  --target knowledge/boluses/ \
+  --dry-run
+```
+
+The migration tool:
+1. Reads existing memory files
+2. Extracts frontmatter (or infers metadata from content)
+3. Maps each memory to a bolus with appropriate render mode, priority, and tags
+4. Writes bolus files to the target directory
+5. Reports what was migrated, what was skipped (duplicates, empties), what needs manual review
+
+### Design Notes
+
+- Migration is a one-time operation, not an ongoing sync
+- `--dry-run` previews without writing
+- Some memories won't map cleanly — the tool flags these for manual curation
+- This could be an S06 subcommand or a standalone script
 
 ---
 
@@ -118,7 +221,8 @@ And receive its tailored injection.
 
 | Story | Scope | Depends On |
 |-------|-------|------------|
-| S06 | CLI tool + agent onboarding (`init`, `agent`, `bolus` commands) | S05 (API layer) |
-| S07 | Web dashboard (bolus library, injection preview, agent registry) | S06 (agent model) |
+| S06 | CLI tool + agent onboarding + recency budget config | S05 (API layer) |
+| S07 | Web dashboard (bolus library, injection preview, agent registry, budget sliders) | S06 (agent model) |
+| Phase 2 | Circle 4 episode capture + recency pipeline + compilation | S04 (assembler), S06 (agent model) |
 
-S06 is the natural next step after Phase 1. It makes the system usable without writing Python. S07 builds on S06's agent model and adds the visual layer.
+S06 is the natural next step after Phase 1. S07 adds the visual layer. Phase 2 adds conversation intelligence.

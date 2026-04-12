@@ -62,7 +62,7 @@ The curation UI for human reconciliation is explicitly out of scope and will be 
 ## Design Decisions (Resolved)
 
 - **Token counting strategy.** Pluggable. A `TokenCounter` protocol with one method (`count(text) -> int`). Ships with a simple word-based heuristic (`words * 1.3`) as the zero-dependency default. Users plug in model-specific tokenizers (tiktoken for GPT, Anthropic's counter for Claude, etc.) when they need precision. The budget thresholds are advisory, so the default heuristic is sufficient for guardrail enforcement.
-- **Bolus frontmatter schema.** Defined in S02. Required fields: `id`, `title`, `active`, `summary`, `created`, `updated`. Optional fields: `tags`, `categories`. Unknown fields are preserved on round-trip for future extensibility.
+- **Bolus frontmatter schema.** Defined in S02, revised in S03. Required fields: `id`, `title`, `active`, `render`, `summary`, `created`, `updated`. Optional fields: `priority`, `tags`. The `render` field (`inline` | `reference`) controls how the bolus appears in the injection. The `priority` field controls ordering. Unknown fields are preserved on round-trip for future extensibility.
 - **API authentication.** Optional API key via config (`api_key` field in `KnowledgeConfig`). If set, all `/v1/` routes require `Authorization: Bearer {key}`. If not set, no auth required. Unauthenticated by default for local development.
 
 ---

@@ -32,13 +32,16 @@ A knowledge management framework for LLM agent systems. Library-first Python pac
 
 ## Build Order
 
-Phase 1 (current PRD): Circle 1 + Circle 2 (inject/ + bolus/ + config)
-Phase 2: Circle 4 (episode capture)
+Phase 1 (current): Circle 1 + Circle 2 (inject/ + bolus/ + config + API)
+Phase 1b: CLI + agent onboarding (S06), web dashboard (S07)
+Phase 2: Circle 4 (episode capture + recency pipeline to Circle 1, configurable token budget via slider)
 Phase 3: Compilation pipeline (Circle 4 → Circle 3)
 Phase 4: Reconciliation (Circle 3 → Circle 2)
 Phase 5: Metrics
 Phase 6: Circle 5 (behavioral mining)
 Phase 7: Vector search (only if needed)
+
+Pilot agents: Atlas (existing memories to migrate, Claude-based) and Selah (cold-start, local Gemma 4).
 
 ## Story Dependency Chain
 

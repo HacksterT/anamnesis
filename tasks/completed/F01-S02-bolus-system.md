@@ -14,7 +14,7 @@ type: software
 
 ## Summary
 
-Implement the Circle 2 knowledge bolus system — the confirmed knowledge library. Each bolus is a markdown file with YAML frontmatter stored in the Circle 2 root directory. This story delivers full CRUD operations, the activation toggle model (active/inactive per bolus), metadata management, categorical pointer retrieval, and the `MarkdownBolusStore` implementation of the `BolusStore` interface defined in S01. After this story, boluses can be created, read, updated, deleted, listed, filtered by activation state, and retrieved by ID.
+Implement the Circle 2 knowledge bolus system — the confirmed knowledge library. Each bolus is a markdown file with YAML frontmatter stored in the Circle 2 root directory. This story delivers full CRUD operations, the activation toggle model (active/inactive per bolus), the render model (`inline` vs `reference`), priority-based ordering, metadata management, categorical pointer retrieval, and the `MarkdownBolusStore` implementation of the `BolusStore` interface defined in S01. After this story, boluses can be created, read, updated, deleted, listed, filtered by activation state, configured for inline or reference rendering, and retrieved by ID.
 
 ## Acceptance Criteria
 

@@ -99,6 +99,49 @@ class KnowledgeFramework:
         """Retrieve bolus content by categorical pointer (alias for read_bolus)."""
         return self.read_bolus(bolus_id)
 
+    # ─── Circle 1: Injection Assembly ─────────────────────────────
+
+    def get_injection(self) -> str:
+        """Assemble and return the injection document as a string."""
+        from anamnesis.inject.assembler import assemble
+
+        text, _ = assemble(
+            self._store,
+            soft_max=self.config.circle1_max_tokens,
+        )
+        return text
+
+    def assemble(self) -> "Path":
+        """Assemble and write the injection document to circle1_path."""
+        from pathlib import Path
+
+        text = self.get_injection()
+        self.config.circle1_path.parent.mkdir(parents=True, exist_ok=True)
+        self.config.circle1_path.write_text(text, encoding="utf-8")
+        return self.config.circle1_path
+
+    def get_injection_metrics(self) -> dict:
+        """Return token counts, budget utilization, and bolus statistics."""
+        from anamnesis.inject.assembler import assemble
+
+        text, budget = assemble(
+            self._store,
+            soft_max=self.config.circle1_max_tokens,
+        )
+
+        all_boluses = self._store.list(active_only=False)
+        active_boluses = [b for b in all_boluses if b.get("active", True)]
+
+        return {
+            "total_tokens": budget.token_count,
+            "soft_max": budget.soft_max,
+            "hard_ceiling": budget.hard_ceiling,
+            "utilization_pct": budget.utilization_pct,
+            "status": budget.status,
+            "active_boluses": len(active_boluses),
+            "total_boluses": len(all_boluses),
+        }
+
 
 def _is_slug(text: str) -> bool:
     """Check if text is already a valid slug."""

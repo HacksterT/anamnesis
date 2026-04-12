@@ -20,9 +20,10 @@ Build a web dashboard for human knowledge management. The dashboard provides a v
 ## Acceptance Criteria
 
 - [ ] Dashboard is accessible at `http://localhost:8741/dashboard` when `anamnesis serve` is running
-- [ ] **Bolus Library view:** table/card view of all boluses with title, summary, tags, active status, last updated; toggle activation; click to view/edit; create new; filter by tag/status
-- [ ] **Injection Preview view:** rendered `anamnesis.md` with token count, budget bar (green/yellow/red), per-section breakdown, "Assemble now" button
+- [ ] **Bolus Library view:** table/card view of all boluses with title, summary, tags, render mode, priority, active status, last updated; toggle activation; click to view/edit; create new; filter by tag/render mode/status
+- [ ] **Injection Preview view:** rendered `anamnesis.md` with token count, budget bar (green/yellow/red), inline vs reference breakdown, recency budget indicator, "Assemble now" button
 - [ ] **Agent Registry view:** list of onboarded agents, per-agent config summary, link to agent-specific injection preview
+- [ ] **Budget Controls:** recency token budget slider (0–1000 tokens) per agent, overall token budget configuration, visual breakdown of curated knowledge vs recency context allocation
 - [ ] Dashboard reads/writes through the `/v1/` API endpoints (no direct library calls from the frontend)
 - [ ] No separate frontend build step required for development
 - [ ] Responsive layout (usable on tablet for review sessions)

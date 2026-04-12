@@ -20,7 +20,7 @@ Build the CLI interface and agent onboarding system. The CLI is the agent's prim
 ## Acceptance Criteria
 
 - [ ] `anamnesis init` initializes a knowledge directory with config file, `anamnesis.md`, and `boluses/`
-- [ ] `anamnesis init --agent <name>` registers a new agent with configurable token budget and section profile
+- [ ] `anamnesis init --agent <name>` registers a new agent with configurable token budget, recency budget, and bolus activation profile
 - [ ] `anamnesis bolus list` shows active boluses; `--all` includes inactive; `--json` outputs JSON
 - [ ] `anamnesis bolus show <id>` prints bolus content to stdout
 - [ ] `anamnesis bolus create <id> --title "..." --summary "..."` creates a bolus (content from stdin or `--file`)
@@ -29,6 +29,7 @@ Build the CLI interface and agent onboarding system. The CLI is the agent's prim
 - [ ] `anamnesis metrics` shows token counts, budget utilization, active bolus count
 - [ ] `anamnesis agent list` shows registered agents
 - [ ] `anamnesis agent show <name>` shows agent config and knowledge summary
+- [ ] `anamnesis agent recency <name> --budget <tokens>` sets the recency token budget for an agent (0–1000, default 400)
 - [ ] All commands support `--json` flag for machine-readable output
 - [ ] Exit codes: 0 success, 1 error, 2 validation failure
 - [ ] Config file (`anamnesis.yaml`) stores defaults, agent registry, and knowledge paths
