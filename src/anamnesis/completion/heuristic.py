@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from anamnesis.episode.model import Episode
-from anamnesis.inject.budget import SimpleTokenCounter, TokenCounter
+from anamnesis.inject.budget import SimpleTokenCounter, TokenCounter, WORDS_TO_TOKENS_RATIO
 
 
 class HeuristicSummarizer:
@@ -65,7 +65,7 @@ class HeuristicSummarizer:
         """Truncate text to fit within token budget."""
         words = text.split()
         # budget / 1.3 ≈ max words
-        max_words = int(budget / 1.3)
+        max_words = int(budget / WORDS_TO_TOKENS_RATIO)
         if len(words) <= max_words:
             return text
         return " ".join(words[:max_words]) + "..."

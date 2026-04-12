@@ -32,6 +32,15 @@ def parse(text: str) -> tuple[dict, str]:
     return metadata, body
 
 
+def parse_metadata(text: str) -> dict:
+    """Parse only the YAML frontmatter, skipping the body.
+
+    More efficient than parse() when body content is not needed.
+    """
+    meta, _ = parse(text)
+    return meta
+
+
 def dump(metadata: dict, body: str) -> str:
     """Serialize metadata and body into a frontmatter markdown string."""
     yaml_str = yaml.dump(

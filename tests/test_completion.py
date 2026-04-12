@@ -1,35 +1,12 @@
 """Tests for CompletionProvider protocol and summarization."""
 
-from datetime import datetime, timedelta, timezone
-
 import pytest
 
 from anamnesis.completion.heuristic import HeuristicSummarizer
 from anamnesis.completion.provider import CompletionProvider, StaticCompletionProvider
 from anamnesis.completion.summarizer import summarize_episode
-from anamnesis.episode.model import Episode, Turn
 from anamnesis.inject.budget import SimpleTokenCounter
-
-
-def _make_episode(n_turns=5, summary=None) -> Episode:
-    now = datetime.now(timezone.utc)
-    turns = [
-        Turn(
-            role="user" if i % 2 == 0 else "assistant",
-            content=f"This is turn number {i} with some content to fill space.",
-            timestamp=(now + timedelta(seconds=i * 10)).isoformat(),
-            sequence=i,
-        )
-        for i in range(n_turns)
-    ]
-    return Episode(
-        session_id="test-session",
-        started=now.isoformat(),
-        ended=(now + timedelta(minutes=10)).isoformat(),
-        turns=turns,
-        summary=summary,
-        turn_count=n_turns,
-    )
+from tests.helpers import make_episode as _make_episode
 
 
 # ─── Protocol ────────────────────────────────────────────────────
@@ -76,7 +53,7 @@ class TestHeuristicSummarizer:
         ep = _make_episode(n_turns=1)
         h = HeuristicSummarizer()
         result = h.summarize(ep, budget=200)
-        assert "turn number 0" in result
+        assert "Turn 0 content" in result
 
     def test_large_episode_takes_last_turns(self) -> None:
         ep = _make_episode(n_turns=50)

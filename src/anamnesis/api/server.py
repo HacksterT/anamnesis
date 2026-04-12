@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
@@ -128,8 +128,7 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
     @app.get("/v1/knowledge/boluses/{bolus_id}")
     async def get_bolus(bolus_id: str):
         try:
-            content = kf.read_bolus(bolus_id)
-            metadata = kf.get_bolus_metadata(bolus_id)
+            metadata, content = kf.store.read_full(bolus_id)
         except KeyError:
             raise HTTPException(status_code=404, detail=f"Bolus '{bolus_id}' not found")
         return {"id": bolus_id, "metadata": metadata, "content": content}
@@ -236,68 +235,56 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
 
     # ─── Agent registry ─────────────────────────────────────────
 
-    def _get_config_path():
-        """Resolve the config file path for agent operations."""
-        from pathlib import Path
+    # ─── Agent registry helpers ─────────────────────────────────
 
-        if _config_path:
-            return Path(_config_path)
-        for name in ["anamnesis.yaml", "anamnesis.yml"]:
-            p = Path(name)
-            if p.exists():
-                return p
-        return None
+    from pathlib import Path as _Path
+    from anamnesis.init import load_project_config, save_project_config
+
+    _resolved_config_path = _Path(_config_path) if _config_path else None
+    if _resolved_config_path is None:
+        for _name in ["anamnesis.yaml", "anamnesis.yml"]:
+            _p = _Path(_name)
+            if _p.exists():
+                _resolved_config_path = _p
+                break
+
+    def _load_agents() -> tuple[_Path, dict, dict]:
+        """Load config and return (config_path, project, agents). Raises HTTPException."""
+        if _resolved_config_path is None:
+            raise HTTPException(status_code=422, detail="No config file found")
+        project = load_project_config(_resolved_config_path)
+        return _resolved_config_path, project, project.get("agents", {})
 
     @app.get("/v1/agents")
     async def list_agents():
-        from anamnesis.init import load_project_config
-
-        cp = _get_config_path()
-        if cp is None:
+        if _resolved_config_path is None:
             return {}
-        project = load_project_config(cp)
+        project = load_project_config(_resolved_config_path)
         return project.get("agents", {})
 
     @app.get("/v1/agents/{name}")
     async def get_agent(name: str):
-        from anamnesis.init import load_project_config
-
-        cp = _get_config_path()
-        if cp is None:
-            raise HTTPException(status_code=404, detail="No config file found")
-        project = load_project_config(cp)
-        agents = project.get("agents", {})
+        _, _, agents = _load_agents()
         if name not in agents:
             raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
         return {"name": name, **agents[name]}
 
     @app.post("/v1/agents", status_code=201)
     async def create_agent(body: AgentCreate):
-        from anamnesis.init import load_project_config, save_project_config
-
-        cp = _get_config_path()
-        if cp is None:
-            raise HTTPException(status_code=422, detail="No config file found")
-        project = load_project_config(cp)
-        agents = project.setdefault("agents", {})
+        cp, project, agents = _load_agents()
         if body.name in agents:
             raise HTTPException(status_code=409, detail=f"Agent '{body.name}' already exists")
         agents[body.name] = {
             "token_budget": body.token_budget,
             "recency_budget": body.recency_budget,
         }
+        project.setdefault("agents", agents)
         save_project_config(cp, project)
         return {"name": body.name, "status": "created"}
 
     @app.patch("/v1/agents/{name}")
     async def update_agent(name: str, body: AgentUpdate):
-        from anamnesis.init import load_project_config, save_project_config
-
-        cp = _get_config_path()
-        if cp is None:
-            raise HTTPException(status_code=422, detail="No config file found")
-        project = load_project_config(cp)
-        agents = project.get("agents", {})
+        cp, project, agents = _load_agents()
         if name not in agents:
             raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
         if body.token_budget is not None:
@@ -309,13 +296,7 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
 
     @app.delete("/v1/agents/{name}")
     async def delete_agent(name: str):
-        from anamnesis.init import load_project_config, save_project_config
-
-        cp = _get_config_path()
-        if cp is None:
-            raise HTTPException(status_code=422, detail="No config file found")
-        project = load_project_config(cp)
-        agents = project.get("agents", {})
+        cp, project, agents = _load_agents()
         if name not in agents:
             raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
         del agents[name]

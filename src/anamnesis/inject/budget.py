@@ -7,6 +7,9 @@ from typing import Protocol, runtime_checkable
 
 from anamnesis.inject.schema import TOKEN_HARD_CEILING, TOKEN_SOFT_MAX_DEFAULT
 
+# Words-to-tokens ratio for English prose heuristic
+WORDS_TO_TOKENS_RATIO = 1.3
+
 
 @runtime_checkable
 class TokenCounter(Protocol):
@@ -18,13 +21,12 @@ class TokenCounter(Protocol):
 class SimpleTokenCounter:
     """Word-based heuristic token counter (zero dependencies).
 
-    Approximates token count as words * 1.3. Within 10-15% of actual
-    counts for English prose — sufficient for budget guardrails.
+    Approximates token count as words * WORDS_TO_TOKENS_RATIO. Within
+    10-15% of actual counts for English prose.
     """
 
     def count(self, text: str) -> int:
-        words = len(text.split())
-        return int(words * 1.3)
+        return int(len(text.split()) * WORDS_TO_TOKENS_RATIO)
 
 
 @dataclass

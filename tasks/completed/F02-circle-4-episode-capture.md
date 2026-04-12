@@ -1,7 +1,7 @@
 ---
 id: F02
 title: Circle 4 — Episode Capture & Recency Pipeline
-status: draft
+status: completed
 created: 2026-04-12
 ---
 
@@ -45,10 +45,10 @@ What could go wrong:
 
 | ID | Title | Priority | Status |
 |----|-------|----------|--------|
-| F02-S01 | Episode Storage & Capture API | Must-Have | Backlog |
-| F02-S02 | CompletionProvider Protocol | Must-Have | Backlog |
-| F02-S03 | Recency Pipeline (Circle 4 → Circle 1) | Must-Have | Backlog |
-| F02-S04 | Agent API & Budget Controls | Must-Have | Backlog |
+| F02-S01 | Episode Storage & Capture API | Must-Have | Done |
+| F02-S02 | CompletionProvider Protocol | Must-Have | Done |
+| F02-S03 | Recency Pipeline (Circle 4 → Circle 1) | Must-Have | Done |
+| F02-S04 | Agent API & Budget Controls | Must-Have | Done |
 
 ## Non-Goals
 

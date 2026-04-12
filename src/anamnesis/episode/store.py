@@ -103,21 +103,21 @@ class EpisodeStore:
             turns=turns,
         )
 
-    def list(self, agent: str | None = None, limit: int = 50) -> list[dict]:
-        """List episode metadata (no turns). Optionally filter by agent."""
+    def _query_episodes(self, agent: str | None, limit: int) -> list:
+        """Shared query builder for episode listing."""
+        base = ("SELECT session_id, agent, started, ended, summary, turn_count, compiled "
+                "FROM episodes")
         if agent:
-            rows = self._conn.execute(
-                "SELECT session_id, agent, started, ended, summary, turn_count, compiled "
-                "FROM episodes WHERE agent = ? ORDER BY started DESC LIMIT ?",
+            return self._conn.execute(
+                f"{base} WHERE agent = ? ORDER BY started DESC LIMIT ?",
                 (agent, limit),
             ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT session_id, agent, started, ended, summary, turn_count, compiled "
-                "FROM episodes ORDER BY started DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+        return self._conn.execute(
+            f"{base} ORDER BY started DESC LIMIT ?", (limit,),
+        ).fetchall()
 
+    def list(self, agent: str | None = None, limit: int = 50) -> list[dict]:
+        """List episode metadata (no turns). Optionally filter by agent."""
         return [
             {
                 "session_id": r[0],
@@ -128,24 +128,15 @@ class EpisodeStore:
                 "turn_count": r[5],
                 "compiled": bool(r[6]),
             }
-            for r in rows
+            for r in self._query_episodes(agent, limit)
         ]
 
     def get_latest(self, agent: str | None = None) -> Episode | None:
         """Return the most recent episode, or None if no episodes exist."""
-        if agent:
-            row = self._conn.execute(
-                "SELECT session_id FROM episodes WHERE agent = ? ORDER BY started DESC LIMIT 1",
-                (agent,),
-            ).fetchone()
-        else:
-            row = self._conn.execute(
-                "SELECT session_id FROM episodes ORDER BY started DESC LIMIT 1"
-            ).fetchone()
-
-        if row is None:
+        rows = self._query_episodes(agent, limit=1)
+        if not rows:
             return None
-        return self.load(row[0])
+        return self.load(rows[0][0])
 
     def cleanup(self, retention_days: int) -> int:
         """Delete episodes older than retention_days. Returns count deleted."""

@@ -6,7 +6,7 @@ from anamnesis.completion.heuristic import HeuristicSummarizer
 from anamnesis.completion.prompts import SUMMARIZE_SESSION
 from anamnesis.completion.provider import CompletionProvider
 from anamnesis.episode.model import Episode
-from anamnesis.inject.budget import SimpleTokenCounter, TokenCounter
+from anamnesis.inject.budget import SimpleTokenCounter, TokenCounter, WORDS_TO_TOKENS_RATIO
 
 
 def summarize_episode(
@@ -51,7 +51,7 @@ def _llm_summarize(
     # Enforce budget on the output
     if counter.count(result) > budget:
         words = result.split()
-        max_words = int(budget / 1.3)
+        max_words = int(budget / WORDS_TO_TOKENS_RATIO)
         result = " ".join(words[:max_words]) + "..."
 
     return result

@@ -4,17 +4,21 @@ A knowledge management framework for LLM agent systems. Library-first Python pac
 
 ## Project State
 
-- **S01 (scaffolding) and S02 (bolus system) are complete.** 36 tests passing. Package is installable via `uv sync`.
-- **S03–S07 are in backlog.** S03 is next (anamnesis.md spec).
-- **Knowledge directory:** `knowledge/anamnesis.md` (Circle 1) and `knowledge/boluses/` (Circle 2) live in this repo. This is the canonical knowledge store.
+- **Phase 1 (F01) complete.** S01–S07: scaffolding, bolus system, injection spec, assembler, API, CLI, dashboard. 
+- **Phase 2 (F02) complete.** S01–S04: SQLite episode storage, CompletionProvider protocol, recency pipeline, agent API + budget controls.
+- **184 tests passing.** Python test suite covers library, API, CLI, episodes, completion, recency.
+- **Knowledge directory:** `knowledge/anamnesis.md` (Circle 1) and `knowledge/boluses/` (Circle 2). Episodes in SQLite (`anamnesis.db`).
+- **Dashboard:** SvelteKit app in `/dashboard` with bolus library, injection preview, agent registry with recency slider.
 
 ## Key Architecture Documents
 
 - `docs/anamnesis/anamnesis-framework.md` — The full framework (five-circle model, triage questions, declarative/procedural/episodic knowledge, transport layer inversion, reconciliation model). ~1700 lines. This is the theory.
 - `docs/anamnesis/anamnesis-construction.md` — The construction plan (Python library, package structure, API surface, build order). This is the implementation blueprint.
-- `tasks/F01-circle-1-and-2-core.md` — Phase 1 PRD feature canvas. Circle 1 (injection) + Circle 2 (boluses).
-- `tasks/F01-S01` through `F01-S07` — The seven implementation stories.
-- `tasks/needed-features.md` — CLI, web dashboard, and agent onboarding design notes.
+- `tasks/completed/F01-circle-1-and-2-core.md` — Phase 1 PRD feature canvas. Circle 1 + Circle 2.
+- `tasks/completed/F01-S01` through `F01-S07` — Phase 1 implementation stories (all complete).
+- `tasks/F02-circle-4-episode-capture.md` — Phase 2 PRD feature canvas. Circle 4 + recency pipeline.
+- `tasks/F02-S01` through `F02-S04` — Phase 2 implementation stories (all complete).
+- `tasks/needed-features.md` — Future features, migration tooling, and technical debt.
 
 ## Design Decisions (Settled)
 
@@ -28,14 +32,16 @@ A knowledge management framework for LLM agent systems. Library-first Python pac
 - **Package manager:** uv (not pip).
 - **No Docker for development.** Convenience Dockerfile in S05 for deployment.
 - **API auth:** Optional API key via config. Unauthenticated by default for local dev.
-- **No CompletionProvider in Phase 1.** Deferred to Phase 3 (compilation pipeline).
+- **CompletionProvider protocol.** One method: `complete(prompt, system) -> str`. Heuristic fallback for zero-LLM operation. Implemented in Phase 2.
+- **Circle 4 storage:** SQLite (`anamnesis.db`). Same database will serve Circles 3 and 5. Episodes + turns tables with indexed queries.
+- **Recency pipeline:** System-managed `_recency` bolus (inline, priority 25). FIFO. Budget carve-out configurable per agent (0–1000 tokens). Disabled by default.
+- **System boluses:** IDs starting with `_` are system-managed. Excluded from user-facing list/delete. Participate in assembly.
 
 ## Build Order
 
-Phase 1 (current): Circle 1 + Circle 2 (inject/ + bolus/ + config + API)
-Phase 1b: CLI + agent onboarding (S06), web dashboard (S07)
-Phase 2: Circle 4 (episode capture + recency pipeline to Circle 1, configurable token budget via slider)
-Phase 3: Compilation pipeline (Circle 4 → Circle 3)
+Phase 1 (done): Circle 1 + Circle 2 (inject/ + bolus/ + config + API + CLI + dashboard)
+Phase 2 (done): Circle 4 (episode capture + recency pipeline + CompletionProvider + agent API)
+Phase 3 (next): Compilation pipeline (Circle 4 → Circle 3)
 Phase 4: Reconciliation (Circle 3 → Circle 2)
 Phase 5: Metrics
 Phase 6: Circle 5 (behavioral mining)
@@ -45,9 +51,9 @@ Pilot agents: Atlas (existing memories to migrate, Claude-based) and Selah (cold
 
 ## Story Dependency Chain
 
-S01 (scaffolding) → S02 (bolus system) → S03 (anamnesis.md spec) → S04 (injection assembly) → S05 (API layer) → S06 (CLI & agent onboarding) → S07 (web dashboard)
-
-S01 and S02 are done. S03 is next. Each story depends on the prior.
+**F01 (Phase 1):** S01 → S02 → S03 → S04 → S05 → S06 → S07 (all complete)
+**F02 (Phase 2):** S01 → S02 → S03 → S04 (all complete)
+**F03 (Phase 3):** Not yet scoped.
 
 ## Conventions
 

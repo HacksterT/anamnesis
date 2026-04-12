@@ -31,8 +31,7 @@ def update_recency(
     If budget is 0, the recency bolus is deleted if it exists.
     """
     if budget <= 0:
-        if store.exists(RECENCY_BOLUS_ID):
-            store.delete(RECENCY_BOLUS_ID)
+        store.delete(RECENCY_BOLUS_ID)  # returns False if not found
         return
 
     summary = summarize_episode(episode, budget, provider=provider)

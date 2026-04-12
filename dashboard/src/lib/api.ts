@@ -55,7 +55,7 @@ export interface AgentConfig {
 // ─── Injection ──────────────────────────────────────────────────
 
 export async function getInjection(): Promise<string> {
-	const res = await fetch(`${BASE}/v1/knowledge/injection`);
+	const res = await request('/v1/knowledge/injection');
 	return res.text();
 }
 

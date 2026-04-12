@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from anamnesis.bolus.base import BolusStore
-from anamnesis.bolus.store import validate_bolus_id, slugify
+from anamnesis.bolus.store import is_valid_bolus_id, validate_bolus_id, slugify
 from anamnesis.config import KnowledgeConfig
 
 
 class KnowledgeFramework:
-    """Central orchestrator for the Anamnesis knowledge management framework.
-
-    Accepts a KnowledgeConfig, validates it, and wires up the appropriate
-    storage backend.
-    """
+    """Central orchestrator for the Anamnesis knowledge management framework."""
 
     def __init__(self, config: KnowledgeConfig) -> None:
         self.config = config
@@ -23,7 +21,6 @@ class KnowledgeFramework:
 
     @property
     def store(self) -> BolusStore:
-        """The active bolus store backend."""
         return self._store
 
     def _init_store(self) -> BolusStore:
@@ -55,16 +52,8 @@ class KnowledgeFramework:
         priority: int = 50,
         tags: list[str] | None = None,
     ) -> None:
-        """Create a new bolus. Raises ValueError if it already exists.
-
-        Args:
-            render: "inline" (full text in injection) or "reference" (manifest
-                    line with retrieval pointer). Default: "reference".
-            priority: Ordering within the injection. Lower = earlier.
-                      Suggested ranges: 1-20 identity/context, 50 knowledge,
-                      90+ constraints.
-        """
-        bolus_id = slugify(bolus_id) if not _is_slug(bolus_id) else bolus_id
+        """Create a new bolus. Raises ValueError if it already exists."""
+        bolus_id = bolus_id if is_valid_bolus_id(bolus_id) else slugify(bolus_id)
         validate_bolus_id(bolus_id)
 
         if self._store.exists(bolus_id):
@@ -82,7 +71,6 @@ class KnowledgeFramework:
         self._store.write(bolus_id, content, metadata)
 
     def read_bolus(self, bolus_id: str) -> str:
-        """Read bolus content by ID."""
         return self._store.read(bolus_id)
 
     def update_bolus(self, bolus_id: str, content: str) -> None:
@@ -91,10 +79,7 @@ class KnowledgeFramework:
         self._store.write(bolus_id, content, meta)
 
     def delete_bolus(self, bolus_id: str) -> bool:
-        """Delete a bolus. Returns True if it existed.
-
-        System boluses (IDs starting with _) cannot be deleted.
-        """
+        """Delete a bolus. System boluses (IDs starting with _) cannot be deleted."""
         if bolus_id.startswith("_"):
             raise ValueError(f"Cannot delete system bolus '{bolus_id}'.")
         return self._store.delete(bolus_id)
@@ -109,15 +94,13 @@ class KnowledgeFramework:
         return boluses
 
     def set_bolus_active(self, bolus_id: str, active: bool) -> None:
-        """Toggle bolus activation state."""
         self._store.set_active(bolus_id, active)
 
     def get_bolus_metadata(self, bolus_id: str) -> dict:
-        """Return frontmatter metadata for a bolus."""
         return self._store.get_metadata(bolus_id)
 
     def retrieve(self, bolus_id: str) -> str:
-        """Retrieve bolus content by categorical pointer (alias for read_bolus)."""
+        """Retrieve bolus content by categorical pointer."""
         return self.read_bolus(bolus_id)
 
     # ─── Circle 1: Injection Assembly ─────────────────────────────
@@ -132,11 +115,8 @@ class KnowledgeFramework:
         )
         return text
 
-
-    def assemble(self) -> "Path":
+    def assemble(self) -> Path:
         """Assemble and write the injection document to circle1_path."""
-        from pathlib import Path
-
         text = self.get_injection()
         self.config.circle1_path.parent.mkdir(parents=True, exist_ok=True)
         self.config.circle1_path.write_text(text, encoding="utf-8")
@@ -145,6 +125,7 @@ class KnowledgeFramework:
     def get_injection_metrics(self) -> dict:
         """Return token counts, budget utilization, and bolus statistics."""
         from anamnesis.inject.assembler import assemble
+        from anamnesis.inject.budget import SimpleTokenCounter
 
         text, budget = assemble(
             self._store,
@@ -154,14 +135,10 @@ class KnowledgeFramework:
         all_boluses = self._store.list(active_only=False)
         active_boluses = [b for b in all_boluses if b.get("active", True)]
 
-        # Calculate recency token usage
         recency_tokens = 0
         if self._store.exists("_recency"):
-            from anamnesis.inject.budget import SimpleTokenCounter
-
             counter = SimpleTokenCounter()
-            recency_content = self._store.read("_recency")
-            recency_tokens = counter.count(recency_content)
+            recency_tokens = counter.count(self._store.read("_recency"))
 
         return {
             "total_tokens": budget.token_count,
@@ -175,25 +152,23 @@ class KnowledgeFramework:
             "recency_budget": self.config.recency_budget,
         }
 
-
     # ─── Circle 4: Episode Capture ──────────────────────────────
 
     def capture_turn(self, role: str, content: str) -> None:
         """Append a conversation turn to the current in-memory session.
 
-        No-op if Circle 4 is not configured (circle4_root is None).
+        No-op if Circle 4 is not configured.
         """
         if self._episode_store is None:
             return
 
         from datetime import datetime, timezone
+        from anamnesis.episode.model import Turn
 
         now = datetime.now(timezone.utc).isoformat()
 
         if self._session_started is None:
             self._session_started = now
-
-        from anamnesis.episode.model import Turn
 
         self._current_turns.append(
             Turn(
@@ -218,7 +193,6 @@ class KnowledgeFramework:
             return None
 
         from datetime import datetime, timezone
-
         from anamnesis.episode.model import Episode
 
         now = datetime.now(timezone.utc)
@@ -236,11 +210,9 @@ class KnowledgeFramework:
 
         self._episode_store.save(episode)
 
-        # Reset in-memory state
         self._current_turns = []
         self._session_started = None
 
-        # Recency pipeline
         if self.config.recency_budget > 0:
             from anamnesis.recency.pipeline import update_recency
 
@@ -248,30 +220,20 @@ class KnowledgeFramework:
                 self._store,
                 episode,
                 self.config.recency_budget,
-                provider=getattr(self.config, "completion_provider", None),
             )
 
-        # Retention cleanup
         if self.config.circle4_retention_days is not None:
             self._episode_store.cleanup(self.config.circle4_retention_days)
 
         return session_id
 
     def list_episodes(self, agent: str | None = None) -> list[dict]:
-        """List episode metadata. No-op if Circle 4 not configured."""
         if self._episode_store is None:
             return []
         return self._episode_store.list(agent=agent)
 
     def get_episode(self, session_id: str):
-        """Get a full episode with turns. Raises KeyError if not found."""
+        """Get a full episode with turns. Raises RuntimeError if Circle 4 not configured."""
         if self._episode_store is None:
-            raise KeyError("Circle 4 is not configured.")
+            raise RuntimeError("Circle 4 is not configured.")
         return self._episode_store.load(session_id)
-
-
-def _is_slug(text: str) -> bool:
-    """Check if text is already a valid slug."""
-    import re
-
-    return bool(re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", text))

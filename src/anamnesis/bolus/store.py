@@ -8,20 +8,22 @@ from pathlib import Path
 
 from anamnesis.bolus.base import BolusStore
 from anamnesis.bolus import frontmatter
+from anamnesis.inject.schema import VALID_RENDER_MODES
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _SYSTEM_ID_RE = re.compile(r"^_[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 _REQUIRED_METADATA = {"id", "title", "active", "render", "summary", "created", "updated"}
-_VALID_RENDER_MODES = {"inline", "reference"}
+
+
+def is_valid_bolus_id(bolus_id: str) -> bool:
+    """Check if a string is a valid bolus ID (slug or system ID)."""
+    return bool(_SLUG_RE.match(bolus_id) or _SYSTEM_ID_RE.match(bolus_id))
 
 
 def validate_bolus_id(bolus_id: str) -> str:
-    """Validate and return a bolus ID, or raise ValueError.
-
-    Accepts regular slugs (e.g. 'my-bolus') and system IDs (e.g. '_recency').
-    """
-    if _SLUG_RE.match(bolus_id) or _SYSTEM_ID_RE.match(bolus_id):
+    """Validate and return a bolus ID, or raise ValueError."""
+    if is_valid_bolus_id(bolus_id):
         return bolus_id
     raise ValueError(
         f"Invalid bolus ID {bolus_id!r}. "
@@ -40,10 +42,7 @@ def slugify(text: str) -> str:
 
 
 class MarkdownBolusStore(BolusStore):
-    """Stores boluses as markdown files with YAML frontmatter.
-
-    Each bolus is a single .md file under the configured root directory.
-    """
+    """Stores boluses as markdown files with YAML frontmatter."""
 
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -53,10 +52,11 @@ class MarkdownBolusStore(BolusStore):
 
     def read(self, bolus_id: str) -> str:
         validate_bolus_id(bolus_id)
-        path = self._path(bolus_id)
-        if not path.exists():
+        try:
+            text = self._path(bolus_id).read_text(encoding="utf-8")
+        except FileNotFoundError:
             raise KeyError(f"Bolus {bolus_id!r} not found.")
-        _, body = frontmatter.parse(path.read_text(encoding="utf-8"))
+        _, body = frontmatter.parse(text)
         return body
 
     def write(self, bolus_id: str, content: str, metadata: dict) -> None:
@@ -65,7 +65,6 @@ class MarkdownBolusStore(BolusStore):
 
         today = date.today().isoformat()
 
-        # Build full metadata, preserving extra fields from caller
         full = dict(metadata)
         full.setdefault("id", bolus_id)
         full.setdefault("active", True)
@@ -74,37 +73,36 @@ class MarkdownBolusStore(BolusStore):
         full.setdefault("created", today)
         full["updated"] = today
 
-        # Validate required fields present
         missing = _REQUIRED_METADATA - set(full.keys())
         if missing:
             raise ValueError(
                 f"Bolus metadata missing required fields: {missing}"
             )
 
-        # Validate render mode
-        if full["render"] not in _VALID_RENDER_MODES:
+        if full["render"] not in VALID_RENDER_MODES:
             raise ValueError(
-                f"render must be one of {_VALID_RENDER_MODES}, "
+                f"render must be one of {VALID_RENDER_MODES}, "
                 f"got {full['render']!r}"
             )
 
-        path = self._path(bolus_id)
-        path.write_text(frontmatter.dump(full, content), encoding="utf-8")
+        self._path(bolus_id).write_text(
+            frontmatter.dump(full, content), encoding="utf-8"
+        )
 
     def delete(self, bolus_id: str) -> bool:
         validate_bolus_id(bolus_id)
-        path = self._path(bolus_id)
-        if not path.exists():
+        try:
+            self._path(bolus_id).unlink()
+            return True
+        except FileNotFoundError:
             return False
-        path.unlink()
-        return True
 
     def list(self, active_only: bool = True) -> list[dict]:
         if not self.root.exists():
             return []
         results = []
         for path in sorted(self.root.glob("*.md")):
-            meta, _ = frontmatter.parse(path.read_text(encoding="utf-8"))
+            meta = frontmatter.parse_metadata(path.read_text(encoding="utf-8"))
             if not meta:
                 continue
             if active_only and not meta.get("active", True):
@@ -112,26 +110,36 @@ class MarkdownBolusStore(BolusStore):
             results.append(meta)
         return results
 
+    def read_full(self, bolus_id: str) -> tuple[dict, str]:
+        """Read both metadata and content in a single parse. Returns (metadata, body)."""
+        validate_bolus_id(bolus_id)
+        try:
+            text = self._path(bolus_id).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise KeyError(f"Bolus {bolus_id!r} not found.")
+        return frontmatter.parse(text)
+
     def exists(self, bolus_id: str) -> bool:
         validate_bolus_id(bolus_id)
         return self._path(bolus_id).exists()
 
     def get_metadata(self, bolus_id: str) -> dict:
         validate_bolus_id(bolus_id)
-        path = self._path(bolus_id)
-        if not path.exists():
+        try:
+            text = self._path(bolus_id).read_text(encoding="utf-8")
+        except FileNotFoundError:
             raise KeyError(f"Bolus {bolus_id!r} not found.")
-        meta, _ = frontmatter.parse(path.read_text(encoding="utf-8"))
-        return meta
+        return frontmatter.parse_metadata(text)
 
     def set_active(self, bolus_id: str, active: bool) -> None:
         validate_bolus_id(bolus_id)
-        path = self._path(bolus_id)
-        if not path.exists():
+        try:
+            text = self._path(bolus_id).read_text(encoding="utf-8")
+        except FileNotFoundError:
             raise KeyError(f"Bolus {bolus_id!r} not found.")
-
-        text = path.read_text(encoding="utf-8")
         meta, body = frontmatter.parse(text)
         meta["active"] = active
         meta["updated"] = date.today().isoformat()
-        path.write_text(frontmatter.dump(meta, body), encoding="utf-8")
+        self._path(bolus_id).write_text(
+            frontmatter.dump(meta, body), encoding="utf-8"
+        )

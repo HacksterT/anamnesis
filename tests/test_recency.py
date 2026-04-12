@@ -1,29 +1,15 @@
 """Tests for the recency pipeline (Circle 4 → Circle 1)."""
 
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from anamnesis import KnowledgeConfig, KnowledgeFramework
 from anamnesis.completion.provider import StaticCompletionProvider
-from anamnesis.episode.model import Episode, Turn
 from anamnesis.recency.pipeline import RECENCY_BOLUS_ID, update_recency
 from anamnesis.bolus.store import MarkdownBolusStore
-
-
-def _make_episode(n_turns=3, summary=None) -> Episode:
-    now = datetime.now(timezone.utc)
-    turns = [
-        Turn(role="user" if i % 2 == 0 else "assistant",
-             content=f"Turn {i}", timestamp=now.isoformat(), sequence=i)
-        for i in range(n_turns)
-    ]
-    return Episode(
-        session_id="test", started=now.isoformat(), ended=now.isoformat(),
-        turns=turns, summary=summary, turn_count=n_turns,
-    )
+from tests.helpers import make_episode as _make_episode
 
 
 # ─── Pipeline unit tests ─────────────────────────────────────────

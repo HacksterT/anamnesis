@@ -8,34 +8,12 @@ import pytest
 from anamnesis import KnowledgeConfig, KnowledgeFramework
 from anamnesis.episode.model import Episode, Turn
 from anamnesis.episode.store import EpisodeStore
-
-
-# ─── EpisodeStore (SQLite) ────────────────────────────────────────
+from tests.helpers import make_episode as _make_episode
 
 
 @pytest.fixture
 def store(tmp_path: Path) -> EpisodeStore:
     return EpisodeStore(tmp_path / "anamnesis.db")
-
-
-def _make_episode(session_id="test-session", agent=None, n_turns=3, summary=None) -> Episode:
-    now = datetime.now(timezone.utc)
-    turns = [
-        Turn(role="user" if i % 2 == 0 else "assistant",
-             content=f"Turn {i} content",
-             timestamp=(now + timedelta(seconds=i)).isoformat(),
-             sequence=i)
-        for i in range(n_turns)
-    ]
-    return Episode(
-        session_id=session_id,
-        agent=agent,
-        started=now.isoformat(),
-        ended=(now + timedelta(minutes=5)).isoformat(),
-        turns=turns,
-        summary=summary,
-        turn_count=n_turns,
-    )
 
 
 class TestEpisodeStore:

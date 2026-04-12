@@ -226,3 +226,44 @@ The migration tool:
 | Phase 2 | Circle 4 episode capture + recency pipeline + compilation | S04 (assembler), S06 (agent model) |
 
 S06 is the natural next step after Phase 1. S07 adds the visual layer. Phase 2 adds conversation intelligence.
+
+---
+
+## 6. Technical Debt & Deferred Improvements
+
+Items identified during code review (simplify pass, 2026-04-12) that are low-urgency but should be addressed before the codebase grows further.
+
+### Custom Exception Types
+
+The framework uses `ValueError`, `KeyError`, and `RuntimeError` inconsistently for domain errors. API endpoints sniff error messages with string matching (`if "already exists" in str(e)`) to decide HTTP status codes. Introduce domain exceptions:
+- `BolusExistsError(ValueError)` — duplicate bolus creation
+- `BolusNotFoundError(KeyError)` — bolus lookup miss
+- `CircleNotConfiguredError(RuntimeError)` — Circle 4/5 operations when not enabled
+
+This cleans up the API layer and makes error handling explicit rather than string-based.
+
+### Literal Types for String Discriminators
+
+Several fields use `str` with comments documenting valid values:
+- `BudgetResult.status` — `"ok" | "warning" | "exceeded"`
+- `KnowledgeConfig.bolus_store` — `"markdown"` (only valid value)
+- `Turn.role` — `"user" | "assistant" | "system" | "tool"`
+- `Episode.render` — via `VALID_RENDER_MODES`
+
+Use `typing.Literal` for these fields. Improves IDE autocomplete and catches typos at type-check time without adding runtime overhead.
+
+### `turn_count` as Derived Property
+
+`Episode.turn_count` is redundant with `len(Episode.turns)`. It's set manually in every caller and could drift. Making it a `@property` is cleaner but requires updating all serialization paths (SQLite store, API responses, tests). Low risk but touches many files.
+
+### Dashboard CSS Cleanup
+
+Shared styles were extracted to `app.css` for the boluses page. The injection and agents pages still carry some duplicated styles in their component `<style>` blocks. Complete the extraction for consistency.
+
+### `BolusUpdate` Dead Field
+
+The `BolusUpdate` Pydantic model (api/server.py) has a `summary` field that is accepted in the request body but never passed through to the framework. Either wire it through `update_bolus()` or remove it from the model.
+
+### Assembler Double-Assembly in Metrics
+
+`get_injection_metrics()` calls `assemble()` (which reads all boluses), then calls `store.list(active_only=False)` which re-scans all bolus files. And if `_recency` exists, reads that file a third time. A future optimization: have `assemble()` return the bolus metadata it already loaded, avoiding the redundant scan.

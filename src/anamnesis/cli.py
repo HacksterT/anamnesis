@@ -290,17 +290,19 @@ def _bolus_show(args) -> None:
     print(content)
 
 
+def _read_content(args) -> str:
+    """Read content from --file flag or stdin."""
+    if args.file:
+        return Path(args.file).read_text(encoding="utf-8")
+    if not sys.stdin.isatty():
+        return sys.stdin.read()
+    print("Provide content via --file or stdin.", file=sys.stderr)
+    sys.exit(1)
+
+
 def _bolus_create(args) -> None:
     kf = _load_framework(args.config)
-
-    if args.file:
-        content = Path(args.file).read_text(encoding="utf-8")
-    elif not sys.stdin.isatty():
-        content = sys.stdin.read()
-    else:
-        print("Provide content via --file or stdin.", file=sys.stderr)
-        sys.exit(1)
-
+    content = _read_content(args)
     tags = [t.strip() for t in args.tags.split(",") if t.strip()] if args.tags else []
 
     try:
@@ -322,14 +324,7 @@ def _bolus_create(args) -> None:
 
 def _bolus_update(args) -> None:
     kf = _load_framework(args.config)
-
-    if args.file:
-        content = Path(args.file).read_text(encoding="utf-8")
-    elif not sys.stdin.isatty():
-        content = sys.stdin.read()
-    else:
-        print("Provide content via --file or stdin.", file=sys.stderr)
-        sys.exit(1)
+    content = _read_content(args)
 
     try:
         kf.update_bolus(args.bolus_id, content)
@@ -349,24 +344,22 @@ def _bolus_delete(args) -> None:
     print(f"Deleted: {args.bolus_id}")
 
 
-def _bolus_activate(args) -> None:
+def _bolus_set_active(args, active: bool, verb: str) -> None:
     kf = _load_framework(args.config)
     try:
-        kf.set_bolus_active(args.bolus_id, True)
+        kf.set_bolus_active(args.bolus_id, active)
     except KeyError:
         print(f"Bolus '{args.bolus_id}' not found.", file=sys.stderr)
         sys.exit(1)
-    print(f"Activated: {args.bolus_id}")
+    print(f"{verb}: {args.bolus_id}")
+
+
+def _bolus_activate(args) -> None:
+    _bolus_set_active(args, True, "Activated")
 
 
 def _bolus_deactivate(args) -> None:
-    kf = _load_framework(args.config)
-    try:
-        kf.set_bolus_active(args.bolus_id, False)
-    except KeyError:
-        print(f"Bolus '{args.bolus_id}' not found.", file=sys.stderr)
-        sys.exit(1)
-    print(f"Deactivated: {args.bolus_id}")
+    _bolus_set_active(args, False, "Deactivated")
 
 
 # ─── Agent commands ──────────────────────────────────────────────
