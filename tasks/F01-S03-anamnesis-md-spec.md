@@ -3,7 +3,7 @@ id: F01-S03
 feature: F01
 title: anamnesis.md Specification
 priority: Must-Have
-status: backlog
+status: done
 created: 2026-04-12
 type: software
 ---
@@ -19,24 +19,24 @@ Define the specification for `anamnesis.md` — the single knowledge injection f
 
 ## Acceptance Criteria
 
-- [ ] A specification document exists at `docs/anamnesis/anamnesis-md-spec.md` defining the format
-- [ ] The spec defines all sections, their ordering, their purpose, and whether they are required or optional
-- [ ] The spec defines the `<knowledge>` XML outer wrapper and its role
-- [ ] The spec defines optimal length bounds with clear thresholds and consequences:
+- [x] A specification document exists at `docs/anamnesis/anamnesis-md-spec.md` defining the format
+- [x] The spec defines all sections, their ordering, their purpose, and whether they are required or optional
+- [x] The spec defines the `<knowledge>` XML outer wrapper and its role
+- [x] The spec defines optimal length bounds with clear thresholds and consequences:
   - Minimum viable: ~500 tokens
   - Target sweet spot: 1,000–2,500 tokens
   - Soft maximum: 4,000 tokens (configurable, default)
   - Hard ceiling: 6,000 tokens
-- [ ] The spec includes a complete reference example of a well-formed `anamnesis.md`
-- [ ] The spec defines the bolus manifest line format (how active boluses appear in the Knowledge Domains section)
-- [ ] A Python dataclass or typed dict defines the section schema programmatically in `src/anamnesis/inject/schema.py`
-- [ ] The schema is importable and usable by the assembler (S04) for validation
+- [x] The spec includes a complete reference example of a well-formed `anamnesis.md`
+- [x] The spec defines the bolus manifest line format (how active boluses appear in the Knowledge Domains section)
+- [x] A Python dataclass or typed dict defines the section schema programmatically in `src/anamnesis/inject/schema.py`
+- [x] The schema is importable and usable by the assembler (S04) for validation
 
 ## Tasks
 
 ### Backend
 
-- [ ] Write the `anamnesis.md` format specification document at `docs/anamnesis/anamnesis-md-spec.md`. The spec must define:
+- [x] Write the `anamnesis.md` format specification document at `docs/anamnesis/anamnesis-md-spec.md`. The spec must define:
 
   **Document structure:**
   ```
@@ -89,7 +89,7 @@ Define the specification for `anamnesis.md` — the single knowledge injection f
   | Soft maximum | 4,000 | Configurable via `circle1_max_tokens`. Beyond this, the injection consumes meaningful context budget. The assembler warns but does not truncate. |
   | Hard ceiling | 6,000 | The assembler refuses to generate. If above 6K tokens, Circle 2 content has leaked into Circle 1 — the manifest has become the content. Recuate: demote detail to boluses, tighten summaries. |
 
-- [ ] Write the complete reference example as part of the spec doc:
+- [x] Write the complete reference example as part of the spec doc:
   ```markdown
   <knowledge>
   # Identity
@@ -120,7 +120,7 @@ Define the specification for `anamnesis.md` — the single knowledge injection f
   </knowledge>
   ```
 
-- [ ] Create `src/anamnesis/inject/schema.py` defining the section schema programmatically:
+- [x] Create `src/anamnesis/inject/schema.py` defining the section schema programmatically:
   ```python
   @dataclass
   class InjectionSection:
@@ -138,7 +138,7 @@ Define the specification for `anamnesis.md` — the single knowledge injection f
   ]
   ```
 
-- [ ] Define token budget constants in the schema module:
+- [x] Define token budget constants in the schema module:
   ```python
   TOKEN_MINIMUM_VIABLE = 500
   TOKEN_TARGET_LOW = 1000
@@ -149,12 +149,12 @@ Define the specification for `anamnesis.md` — the single knowledge injection f
 
 ### Testing & Verification
 
-- [ ] Write test: validate the reference example against the schema (correct sections in correct order, required sections present)
-- [ ] Write test: a document missing the Identity section fails validation
-- [ ] Write test: a document missing Knowledge Domains section fails validation
-- [ ] Write test: a document with sections out of order is flagged
-- [ ] Local Testing: `pytest tests/` passes
-- [ ] Manual Testing: CHECKPOINT — Notify user to review the spec document and reference example for accuracy and completeness
+- [x] Write test: validate the reference example against the schema (correct sections in correct order, required sections present)
+- [x] Write test: a document missing the Identity section fails validation
+- [x] Write test: a document missing Knowledge Domains section fails validation
+- [x] Write test: a document with sections out of order is flagged
+- [x] Local Testing: `pytest tests/` passes
+- [x] Manual Testing: CHECKPOINT — Notify user to review the spec document and reference example for accuracy and completeness
 
 ### Git
 

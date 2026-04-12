@@ -4,16 +4,17 @@ A knowledge management framework for LLM agent systems. Library-first Python pac
 
 ## Project State
 
-- **Phase 1 PRD is complete** in `tasks/` (F01 feature canvas + 5 stories, S01-S05). Implementation has not started.
-- **Framework doc** updated with bolus activation model in Section 9.1.5 (selective toggles, future dynamic assembly).
-- No code exists yet. This is a documentation/design repo preparing for implementation.
+- **S01 (scaffolding) and S02 (bolus system) are complete.** 36 tests passing. Package is installable via `uv sync`.
+- **S03–S07 are in backlog.** S03 is next (anamnesis.md spec).
+- **Knowledge directory:** `knowledge/anamnesis.md` (Circle 1) and `knowledge/boluses/` (Circle 2) live in this repo. This is the canonical knowledge store.
 
 ## Key Architecture Documents
 
 - `docs/anamnesis/anamnesis-framework.md` — The full framework (five-circle model, triage questions, declarative/procedural/episodic knowledge, transport layer inversion, reconciliation model). ~1700 lines. This is the theory.
 - `docs/anamnesis/anamnesis-construction.md` — The construction plan (Python library, package structure, API surface, build order). This is the implementation blueprint.
 - `tasks/F01-circle-1-and-2-core.md` — Phase 1 PRD feature canvas. Circle 1 (injection) + Circle 2 (boluses).
-- `tasks/F01-S01` through `F01-S05` — The five implementation stories.
+- `tasks/F01-S01` through `F01-S07` — The seven implementation stories.
+- `tasks/needed-features.md` — CLI, web dashboard, and agent onboarding design notes.
 
 ## Design Decisions (Settled)
 
@@ -41,9 +42,9 @@ Phase 7: Vector search (only if needed)
 
 ## Story Dependency Chain
 
-S01 (scaffolding) → S02 (bolus system) → S03 (anamnesis.md spec) → S04 (injection assembly) → S05 (API layer)
+S01 (scaffolding) → S02 (bolus system) → S03 (anamnesis.md spec) → S04 (injection assembly) → S05 (API layer) → S06 (CLI & agent onboarding) → S07 (web dashboard)
 
-S01 has no blockers. S02-S05 each depend on prior stories.
+S01 and S02 are done. S03 is next. Each story depends on the prior.
 
 ## Conventions
 

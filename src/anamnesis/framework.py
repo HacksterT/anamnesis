@@ -40,10 +40,19 @@ class KnowledgeFramework:
         *,
         title: str | None = None,
         summary: str = "",
+        render: str = "reference",
+        priority: int = 50,
         tags: list[str] | None = None,
-        categories: list[str] | None = None,
     ) -> None:
-        """Create a new bolus. Raises ValueError if it already exists."""
+        """Create a new bolus. Raises ValueError if it already exists.
+
+        Args:
+            render: "inline" (full text in injection) or "reference" (manifest
+                    line with retrieval pointer). Default: "reference".
+            priority: Ordering within the injection. Lower = earlier.
+                      Suggested ranges: 1-20 identity/context, 50 knowledge,
+                      90+ constraints.
+        """
         bolus_id = slugify(bolus_id) if not _is_slug(bolus_id) else bolus_id
         validate_bolus_id(bolus_id)
 
@@ -54,9 +63,10 @@ class KnowledgeFramework:
             "id": bolus_id,
             "title": title or bolus_id.replace("-", " ").title(),
             "active": True,
+            "render": render,
+            "priority": priority,
             "summary": summary,
             "tags": tags or [],
-            "categories": categories or [],
         }
         self._store.write(bolus_id, content, metadata)
 

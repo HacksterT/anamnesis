@@ -84,6 +84,8 @@ Phase 1 in progress. See [tasks/](tasks/) for the full story map.
 | S03 | anamnesis.md spec | Next |
 | S04 | Injection assembly | Planned |
 | S05 | API layer | Planned |
+| S06 | CLI tool & agent onboarding | Planned |
+| S07 | Web dashboard | Planned |
 
 ## License
 

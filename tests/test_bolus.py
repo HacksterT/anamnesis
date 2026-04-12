@@ -90,34 +90,34 @@ def kf(tmp_path: Path) -> KnowledgeFramework:
 
 
 class TestMarkdownBolusStore:
+    def _meta(self, bolus_id: str = "infra", **overrides) -> dict:
+        """Helper to build valid metadata with defaults."""
+        base = {
+            "id": bolus_id, "title": "Infrastructure", "active": True,
+            "render": "reference", "summary": "Servers and stuff.",
+        }
+        base.update(overrides)
+        return base
+
     def test_write_and_read(self, store: MarkdownBolusStore) -> None:
-        store.write("infra", "Content here.", {
-            "id": "infra", "title": "Infrastructure", "active": True,
-            "summary": "Servers and stuff.", "tags": [],
-        })
+        store.write("infra", "Content here.", self._meta())
         body = store.read("infra")
         assert body == "Content here."
 
     def test_exists(self, store: MarkdownBolusStore) -> None:
         assert not store.exists("infra")
-        store.write("infra", "x", {
-            "id": "infra", "title": "Infra", "active": True,
-            "summary": "s", "tags": [],
-        })
+        store.write("infra", "x", self._meta())
         assert store.exists("infra")
 
     def test_delete(self, store: MarkdownBolusStore) -> None:
-        store.write("infra", "x", {
-            "id": "infra", "title": "Infra", "active": True,
-            "summary": "s", "tags": [],
-        })
+        store.write("infra", "x", self._meta())
         assert store.delete("infra") is True
         assert store.delete("infra") is False
         assert not store.exists("infra")
 
     def test_list_active_only(self, store: MarkdownBolusStore) -> None:
-        store.write("a", "x", {"id": "a", "title": "A", "active": True, "summary": "s"})
-        store.write("b", "x", {"id": "b", "title": "B", "active": False, "summary": "s"})
+        store.write("a", "x", self._meta("a", title="A"))
+        store.write("b", "x", self._meta("b", title="B", active=False))
         active = store.list(active_only=True)
         assert len(active) == 1
         assert active[0]["id"] == "a"
@@ -126,20 +126,18 @@ class TestMarkdownBolusStore:
         assert len(all_boluses) == 2
 
     def test_get_metadata(self, store: MarkdownBolusStore) -> None:
-        store.write("infra", "body", {
-            "id": "infra", "title": "Infrastructure", "active": True,
-            "summary": "Mac Mini.", "tags": ["tech"],
-        })
+        store.write("infra", "body", self._meta(
+            summary="Mac Mini.", tags=["tech"],
+        ))
         meta = store.get_metadata("infra")
         assert meta["title"] == "Infrastructure"
         assert meta["tags"] == ["tech"]
+        assert meta["render"] == "reference"
         assert "created" in meta
         assert "updated" in meta
 
     def test_set_active(self, store: MarkdownBolusStore) -> None:
-        store.write("infra", "body", {
-            "id": "infra", "title": "Infra", "active": True, "summary": "s",
-        })
+        store.write("infra", "body", self._meta())
         store.set_active("infra", False)
         meta = store.get_metadata("infra")
         assert meta["active"] is False
@@ -164,15 +162,33 @@ class TestMarkdownBolusStore:
         with pytest.raises(ValueError, match="missing required fields"):
             store.write("bad", "content", {"id": "bad"})
 
+    def test_invalid_render_mode_raises(self, store: MarkdownBolusStore) -> None:
+        with pytest.raises(ValueError, match="render must be one of"):
+            store.write("bad", "content", self._meta(render="unknown"))
+
     def test_list_empty_dir(self, store: MarkdownBolusStore) -> None:
         assert store.list() == []
 
     def test_write_sets_timestamps(self, store: MarkdownBolusStore) -> None:
+        store.write("infra", "body", self._meta())
+        meta = store.get_metadata("infra")
+        assert meta["created"] == meta["updated"]
+
+    def test_write_defaults_render_and_priority(self, store: MarkdownBolusStore) -> None:
         store.write("infra", "body", {
             "id": "infra", "title": "Infra", "active": True, "summary": "s",
         })
         meta = store.get_metadata("infra")
-        assert meta["created"] == meta["updated"]
+        assert meta["render"] == "reference"
+        assert meta["priority"] == 50
+
+    def test_inline_render_mode(self, store: MarkdownBolusStore) -> None:
+        store.write("identity", "Physician-builder.", self._meta(
+            "identity", render="inline", priority=10,
+        ))
+        meta = store.get_metadata("identity")
+        assert meta["render"] == "inline"
+        assert meta["priority"] == 10
 
 
 # ─── KnowledgeFramework bolus methods ───────────────────────────
@@ -221,10 +237,25 @@ class TestFrameworkBolus:
         kf.create_bolus("My Infrastructure", "content", summary="s")
         assert kf.read_bolus("my-infrastructure") == "content"
 
+    def test_create_defaults_to_reference(self, kf: KnowledgeFramework) -> None:
+        kf.create_bolus("infra", "content", summary="s")
+        meta = kf.get_bolus_metadata("infra")
+        assert meta["render"] == "reference"
+        assert meta["priority"] == 50
+
+    def test_create_inline_bolus(self, kf: KnowledgeFramework) -> None:
+        kf.create_bolus(
+            "identity", "Physician-builder.",
+            summary="User identity.", render="inline", priority=10,
+        )
+        meta = kf.get_bolus_metadata("identity")
+        assert meta["render"] == "inline"
+        assert meta["priority"] == 10
+
     def test_file_is_human_readable(self, kf: KnowledgeFramework) -> None:
         kf.create_bolus("infra", "Mac Mini M4 Pro server.", summary="Servers.")
         path = kf.config.circle2_root / "infra.md"
         text = path.read_text()
         assert text.startswith("---\n")
         assert "Mac Mini M4 Pro server." in text
-        assert "title:" in text
+        assert "render: reference" in text

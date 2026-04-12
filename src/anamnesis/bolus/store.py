@@ -11,7 +11,8 @@ from anamnesis.bolus import frontmatter
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
-_REQUIRED_METADATA = {"id", "title", "active", "summary", "created", "updated"}
+_REQUIRED_METADATA = {"id", "title", "active", "render", "summary", "created", "updated"}
+_VALID_RENDER_MODES = {"inline", "reference"}
 
 
 def validate_bolus_id(bolus_id: str) -> str:
@@ -64,6 +65,8 @@ class MarkdownBolusStore(BolusStore):
         full = dict(metadata)
         full.setdefault("id", bolus_id)
         full.setdefault("active", True)
+        full.setdefault("render", "reference")
+        full.setdefault("priority", 50)
         full.setdefault("created", today)
         full["updated"] = today
 
@@ -72,6 +75,13 @@ class MarkdownBolusStore(BolusStore):
         if missing:
             raise ValueError(
                 f"Bolus metadata missing required fields: {missing}"
+            )
+
+        # Validate render mode
+        if full["render"] not in _VALID_RENDER_MODES:
+            raise ValueError(
+                f"render must be one of {_VALID_RENDER_MODES}, "
+                f"got {full['render']!r}"
             )
 
         path = self._path(bolus_id)
