@@ -48,11 +48,13 @@ class AgentCreate(BaseModel):
     name: str
     token_budget: int = 4000
     recency_budget: int = 400
+    active_boluses: list[str] = []
 
 
 class AgentUpdate(BaseModel):
     token_budget: int | None = None
     recency_budget: int | None = None
+    active_boluses: list[str] | None = None
 
 
 # ─── App factory ─────────────────────────────────────────────────
@@ -105,17 +107,17 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
     # ─── Injection endpoints ──────────────────────────────────
 
     @app.get("/v1/knowledge/injection", response_class=PlainTextResponse)
-    async def get_injection():
+    async def get_injection(agent: str | None = None):
         try:
-            text = kf.get_injection()
+            text = kf.get_injection(agent=agent)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
         return Response(content=text, media_type="text/markdown")
 
     @app.get("/v1/knowledge/injection/metrics")
-    async def get_injection_metrics():
+    async def get_injection_metrics(agent: str | None = None):
         try:
-            return kf.get_injection_metrics()
+            return kf.get_injection_metrics(agent=agent)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 
@@ -277,6 +279,7 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
         agents[body.name] = {
             "token_budget": body.token_budget,
             "recency_budget": body.recency_budget,
+            "active_boluses": body.active_boluses,
         }
         project.setdefault("agents", agents)
         save_project_config(cp, project)
@@ -291,6 +294,8 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
             agents[name]["token_budget"] = body.token_budget
         if body.recency_budget is not None:
             agents[name]["recency_budget"] = body.recency_budget
+        if body.active_boluses is not None:
+            agents[name]["active_boluses"] = body.active_boluses
         save_project_config(cp, project)
         return {"name": name, **agents[name]}
 

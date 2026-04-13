@@ -3,7 +3,7 @@ id: F03-S01
 feature: F03
 title: Per-Agent Bolus Activation Profiles
 priority: Must-Have
-status: backlog
+status: done
 created: 2026-04-12
 type: software
 ---

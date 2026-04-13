@@ -16,12 +16,17 @@ def assemble(
     soft_max: int = 4000,
     hard_ceiling: int = TOKEN_HARD_CEILING,
     counter: TokenCounter | None = None,
+    agent: str | None = None,
+    agent_active_boluses: list[str] | None = None,
 ) -> tuple[str, BudgetResult]:
     """Assemble an anamnesis.md document from active boluses.
 
-    Pure function. Reads active boluses from the store, renders them
-    by render mode (inline first, then reference manifest), wraps in
-    <knowledge> tags, and checks token budget.
+    Args:
+        agent: If specified, only include the matching recency bolus
+            (_recency-{agent}) and exclude other agents' recency boluses.
+        agent_active_boluses: Additional bolus IDs to activate for this
+            agent beyond the defaults. Boluses in this list are included
+            even if their default active state is False.
 
     Returns (assembled_text, budget_result).
     Raises ValueError if hard ceiling is exceeded.
@@ -29,7 +34,31 @@ def assemble(
     if counter is None:
         counter = SimpleTokenCounter()
 
-    boluses = store.list(active_only=True)
+    # Get all boluses (active and inactive) if we have agent overrides
+    if agent_active_boluses:
+        all_boluses = store.list(active_only=False)
+        boluses = []
+        for b in all_boluses:
+            bid = b.get("id", "")
+            if b.get("active", True) or bid in agent_active_boluses:
+                boluses.append(b)
+    else:
+        boluses = store.list(active_only=True)
+
+    # Filter recency boluses by agent
+    if agent:
+        my_recency = f"_recency-{agent}"
+        boluses = [
+            b for b in boluses
+            if not b.get("id", "").startswith("_recency")
+            or b.get("id") == my_recency
+        ]
+    else:
+        # No agent specified — include _recency (shared) but exclude agent-specific ones
+        boluses = [
+            b for b in boluses
+            if not (b.get("id", "").startswith("_recency-"))
+        ]
 
     # Sort by priority (lower first), then alphabetically by title
     boluses.sort(key=lambda b: (b.get("priority", 50), b.get("title", "")))

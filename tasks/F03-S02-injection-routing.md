@@ -3,7 +3,7 @@ id: F03-S02
 feature: F03
 title: Injection Routing & Recency Isolation
 priority: Must-Have
-status: backlog
+status: done
 created: 2026-04-12
 type: software
 ---

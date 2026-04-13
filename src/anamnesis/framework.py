@@ -105,40 +105,66 @@ class KnowledgeFramework:
 
     # ─── Circle 1: Injection Assembly ─────────────────────────────
 
-    def get_injection(self) -> str:
-        """Assemble and return the injection document as a string."""
+    def _resolve_agent_profile(self, agent: str | None) -> list[str] | None:
+        """Resolve an agent's active_boluses list from the config file."""
+        if agent is None:
+            return None
+        from anamnesis.init import load_project_config
+        for name in ["anamnesis.yaml", "anamnesis.yml"]:
+            p = Path(name)
+            if p.exists():
+                project = load_project_config(p)
+                agents = project.get("agents", {})
+                if agent in agents:
+                    return agents[agent].get("active_boluses", [])
+        return []
+
+    def get_injection(self, agent: str | None = None) -> str:
+        """Assemble and return the injection document.
+
+        If agent is specified, applies the agent's activation profile
+        and includes only that agent's recency bolus.
+        """
         from anamnesis.inject.assembler import assemble
 
+        profile = self._resolve_agent_profile(agent)
         text, _ = assemble(
             self._store,
             soft_max=self.config.circle1_max_tokens,
+            agent=agent,
+            agent_active_boluses=profile,
         )
         return text
 
-    def assemble(self) -> Path:
+    def assemble(self, agent: str | None = None) -> Path:
         """Assemble and write the injection document to circle1_path."""
-        text = self.get_injection()
+        text = self.get_injection(agent=agent)
         self.config.circle1_path.parent.mkdir(parents=True, exist_ok=True)
         self.config.circle1_path.write_text(text, encoding="utf-8")
         return self.config.circle1_path
 
-    def get_injection_metrics(self) -> dict:
+    def get_injection_metrics(self, agent: str | None = None) -> dict:
         """Return token counts, budget utilization, and bolus statistics."""
         from anamnesis.inject.assembler import assemble
         from anamnesis.inject.budget import SimpleTokenCounter
+        from anamnesis.recency.pipeline import recency_bolus_id
 
+        profile = self._resolve_agent_profile(agent)
         text, budget = assemble(
             self._store,
             soft_max=self.config.circle1_max_tokens,
+            agent=agent,
+            agent_active_boluses=profile,
         )
 
         all_boluses = self._store.list(active_only=False)
         active_boluses = [b for b in all_boluses if b.get("active", True)]
 
+        recency_id = recency_bolus_id(agent)
         recency_tokens = 0
-        if self._store.exists("_recency"):
+        if self._store.exists(recency_id):
             counter = SimpleTokenCounter()
-            recency_tokens = counter.count(self._store.read("_recency"))
+            recency_tokens = counter.count(self._store.read(recency_id))
 
         return {
             "total_tokens": budget.token_count,
@@ -150,6 +176,7 @@ class KnowledgeFramework:
             "total_boluses": len(all_boluses),
             "recency_tokens": recency_tokens,
             "recency_budget": self.config.recency_budget,
+            "agent": agent,
         }
 
     # ─── Circle 4: Episode Capture ──────────────────────────────
@@ -220,6 +247,7 @@ class KnowledgeFramework:
                 self._store,
                 episode,
                 self.config.recency_budget,
+                agent=agent,
             )
 
         if self.config.circle4_retention_days is not None:

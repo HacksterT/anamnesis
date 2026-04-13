@@ -56,8 +56,13 @@ def register_agent(
     token_budget: int = 4000,
     recency_budget: int = 400,
     knowledge_dir: str | None = None,
+    active_boluses: list[str] | None = None,
 ) -> None:
     """Register an agent in the config file.
+
+    Args:
+        active_boluses: List of bolus IDs to activate for this agent
+            beyond the defaults. Empty list or None means use defaults only.
 
     Raises ValueError if the agent already exists.
     """
@@ -70,6 +75,7 @@ def register_agent(
     agents[name] = {
         "token_budget": token_budget,
         "recency_budget": recency_budget,
+        "active_boluses": active_boluses or [],
     }
     if knowledge_dir:
         agents[name]["knowledge_dir"] = knowledge_dir

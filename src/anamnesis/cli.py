@@ -21,6 +21,7 @@ def main(argv: list[str] | None = None) -> None:
     init_p.add_argument("--dir", type=str, default="knowledge", help="Knowledge directory")
     init_p.add_argument("--token-budget", type=int, default=4000)
     init_p.add_argument("--recency-budget", type=int, default=400)
+    init_p.add_argument("--boluses", type=str, default="", help="Comma-separated bolus IDs to activate for this agent")
 
     # ─── serve ────────────────────────────────────────────────
     serve_p = sub.add_parser("serve", help="Start the REST API server")
@@ -145,11 +146,13 @@ def _cmd_init(args) -> None:
     print(f"Config: {config_path}")
 
     if args.agent:
+        boluses = [b.strip() for b in args.boluses.split(",") if b.strip()] if args.boluses else []
         register_agent(
             config_path,
             args.agent,
             token_budget=args.token_budget,
             recency_budget=args.recency_budget,
+            active_boluses=boluses,
         )
         print(f"Agent registered: {args.agent}")
 

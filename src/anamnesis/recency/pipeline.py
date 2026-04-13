@@ -16,22 +16,32 @@ RECENCY_PRIORITY = 25
 RECENCY_TAGS = ["_system", "recency"]
 
 
+def recency_bolus_id(agent: str | None = None) -> str:
+    """Return the recency bolus ID for a given agent."""
+    if agent:
+        return f"_recency-{agent}"
+    return RECENCY_BOLUS_ID
+
+
 def update_recency(
     store: BolusStore,
     episode: Episode,
     budget: int,
     provider: CompletionProvider | None = None,
+    agent: str | None = None,
 ) -> None:
-    """Summarize an episode and write/update the _recency bolus.
+    """Summarize an episode and write/update the recency bolus.
 
-    The recency bolus is a system-managed inline bolus that contains
-    a summary of the most recent session. It's overwritten on each call
-    (FIFO — new context replaces old).
+    If agent is specified, writes to _recency-{agent} instead of _recency.
+    Each agent gets its own recency bolus — ending an Atlas session
+    doesn't affect Selah's recency.
 
     If budget is 0, the recency bolus is deleted if it exists.
     """
+    bolus_id = recency_bolus_id(agent)
+
     if budget <= 0:
-        store.delete(RECENCY_BOLUS_ID)  # returns False if not found
+        store.delete(bolus_id)
         return
 
     summary = summarize_episode(episode, budget, provider=provider)
@@ -40,13 +50,13 @@ def update_recency(
         return
 
     metadata = {
-        "id": RECENCY_BOLUS_ID,
-        "title": "Recent Context",
+        "id": bolus_id,
+        "title": f"Recent Context ({agent})" if agent else "Recent Context",
         "active": True,
         "render": "inline",
         "priority": RECENCY_PRIORITY,
-        "summary": "System-managed recency context from last session.",
+        "summary": f"System-managed recency for {agent}." if agent else "System-managed recency context.",
         "tags": RECENCY_TAGS,
     }
 
-    store.write(RECENCY_BOLUS_ID, summary, metadata)
+    store.write(bolus_id, summary, metadata)
