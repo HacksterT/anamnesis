@@ -158,6 +158,7 @@ Option (c) is recommended for Atlas specifically because the existing memories a
 
 ## Acceptance Criteria
 
+### Phase A: Basic Integration
 - [ ] `AnamnesisClient` class with typed methods for injection, retrieval, capture, and health
 - [ ] Atlas loads system prompt from `client.getInjection()` at session start
 - [ ] Fallback to cached injection if API is unreachable
@@ -166,6 +167,15 @@ Option (c) is recommended for Atlas specifically because the existing memories a
 - [ ] `client.endSession("atlas")` called on session end
 - [ ] Health check on Atlas startup to verify Anamnesis API connectivity
 - [ ] Existing Atlas memories reviewed and migrated to boluses (manual)
+
+### Phase B: Transport Layer Inversion (after F03-S01/S02)
+- [ ] `execute_skill` registered as the single tool for skill invocation
+- [ ] All `.atlas/skills/*/SKILL.md` content migrated to Anamnesis as skill boluses
+- [ ] CLI tool scripts remain in Atlas repo, called internally by execute_skill handler
+- [ ] Granular tool definitions removed from LLM context
+- [ ] CLAUDE.md content fully migrated to Anamnesis boluses — CLAUDE.md reduced to minimal pointer or eliminated
+- [ ] Three personas mapped to agent profiles: `atlas-cto`, `atlas-assistant`, `atlas-researcher`
+- [ ] Persona switch triggers `getInjection(agent="{persona}")` for context-appropriate injection
 
 ## Non-Goals
 
@@ -182,7 +192,143 @@ Option (c) is recommended for Atlas specifically because the existing memories a
 - **No WebSocket.** All communication is request/response HTTP. No streaming, no push notifications. Atlas polls or calls on demand.
 - **Concurrency.** Multiple Atlas sessions could be active simultaneously (multiple terminal windows). Each session's `captureTurn` calls go to the same API. Episodes are identified by session, so concurrent capture is safe as long as each session calls `endSession` when done. Note: the current `KnowledgeFramework` holds one in-memory session at a time — if Atlas has multiple concurrent sessions hitting the API, only the last one's turns will be in the recency bolus. This is acceptable for personal use; multi-session support would need session IDs in the API.
 
+## 6. Transport Layer Inversion — Skill Migration
+
+### The Problem with Current Tool Exposure
+
+Atlas currently exposes granular tools directly to the LLM via MCP/function calling. Each tool (gmail_read_message, gcal_create_event, pubmed-cli.js, etc.) is a separate function definition in the context window. With 30-40 tools, this consumes 4-8K tokens on every turn — whether the tools are used or not.
+
+### The Inverted Model
+
+Per the Anamnesis framework (Section 9.2), the LLM should see **skills**, not tools. Tools are invisible infrastructure inside skills.
+
+**Before (current Atlas):**
+```
+LLM context:
+  - 40 tool definitions (4-8K tokens)
+  - CLAUDE.md system prompt
+  - .atlas persona definitions
+  - conversation history
+```
+
+**After (with Anamnesis):**
+```
+LLM context:
+  - anamnesis.md (1-2K tokens) — includes skill manifest
+  - 1 tool definition: execute_skill (100 tokens)
+  - conversation history
+```
+
+### How Skills Work in the New Model
+
+**Skill awareness** lives in Anamnesis as reference boluses tagged `skill`. The injection manifest tells the LLM what skills exist and their triggers:
+
+```markdown
+## Available Knowledge
+- **Infrastructure**: Mac Mini, servers. -> `infrastructure`
+- **Deep Research**: Multi-source discovery (PubMed, Scholar, Grok, Perplexity).
+  Triggers: research, investigate, deep dive. -> `skill-deep-research`
+- **Email Management**: Read, compose, reply, organize.
+  Triggers: email, message, send, draft. -> `skill-email-management`
+```
+
+**Skill procedure** (the SKILL.md content) is the bolus body. Retrieved on demand via `retrieve_knowledge("skill-deep-research")` only when the skill is actually invoked. Not loaded into context otherwise.
+
+**Skill execution** stays in Atlas. The CLI scripts (`pubmed-cli.js`, `grok-cli.js`, etc.) remain in the Atlas repo. They're application code, not knowledge.
+
+### The execute_skill Tool
+
+Atlas registers ONE tool with the LLM:
+
+```typescript
+{
+  name: "execute_skill",
+  description: "Execute a skill by name. The skill's procedure will be retrieved from the knowledge base and executed. Use the skill name from the Available Knowledge manifest.",
+  input_schema: {
+    type: "object",
+    properties: {
+      skill_name: {
+        type: "string",
+        description: "The skill identifier (e.g. 'skill-deep-research')"
+      },
+      params: {
+        type: "object",
+        description: "Parameters for the skill (varies by skill)"
+      }
+    },
+    required: ["skill_name"]
+  }
+}
+```
+
+### execute_skill Handler
+
+```typescript
+async function handleExecuteSkill(skillName: string, params: any): Promise<string> {
+  const client = new AnamnesisClient();
+  
+  // 1. Retrieve the skill procedure from Anamnesis
+  const procedure = await client.retrieveKnowledge(skillName);
+  
+  // 2. Parse the procedure to determine which tools to call
+  //    (This is Atlas's skill runtime — the orchestration logic)
+  
+  // 3. Execute the tool scripts locally
+  //    e.g., run pubmed-cli.js, grok-cli.js per the procedure's tiers
+  
+  // 4. Return the result to the LLM
+  return result;
+}
+```
+
+Step 2 is the key design decision for Atlas: how does the runtime parse SKILL.md and orchestrate the internal tool calls? Options:
+- (a) A lightweight LLM call that reads SKILL.md and executes the steps (current Atlas approach with personas)
+- (b) A deterministic parser that extracts tool calls and execution order from SKILL.md structure
+- (c) A hybrid — structured YAML/frontmatter for the execution plan, prose for the LLM's context
+
+This is an Atlas-side decision. Anamnesis just stores and serves the SKILL.md content.
+
+### Skill Migration Plan
+
+For each existing skill in `.atlas/skills/`:
+
+1. **Create a skill bolus** in Anamnesis with the SKILL.md content as the body, tagged `skill`, render mode `reference`, and a summary with trigger keywords
+2. **Keep the CLI scripts** in `.atlas/skills/{name}/` (or move to a `tools/` directory in Atlas)
+3. **Remove tool definitions** from the LLM's context. They're now invisible — called internally by the skill runtime
+4. **Replace CLAUDE.md knowledge** with Anamnesis boluses. CLAUDE.md shrinks to a minimal pointer or is eliminated entirely
+5. **Test each skill** — invoke via the manifest trigger, verify the execute_skill handler retrieves the procedure and executes correctly
+
+### What This Means for Personas
+
+Atlas's three personas currently function as different agents. In the Anamnesis model, each persona maps to an **agent profile** with its own bolus activation:
+
+- `atlas-cto` — activates infrastructure, architecture, and system admin skill boluses
+- `atlas-assistant` — activates email, calendar, and personal management skill boluses  
+- `atlas-researcher` — activates deep-research, literature review skill boluses
+
+When Atlas switches persona, it calls `GET /v1/knowledge/injection?agent=atlas-cto` and gets a tailored injection with only the relevant skills and knowledge visible. The persona switch becomes a knowledge context switch.
+
+---
+
+## Applicability to Selah
+
+This same model applies to Selah:
+
+- **Skill boluses** (shared across all tenants): `skill-scripture-search`, `skill-commentary-lookup`, `skill-study-guide`
+- **Tool scripts** (in Selah repo): Bible API client, commentary database client, study guide generator
+- **One tool for the LLM**: `execute_skill(name, params)`
+- **Per-tenant knowledge**: identity, study notes, sermon history (in Anamnesis, per-tenant knowledge dirs)
+- **Shared skills**: all pastors see the same skill manifest. Skills toggled on/off per tenant via bolus activation profiles
+
+Pastors don't create skills. They provide feedback, you develop new skills and deploy them. New skill = new bolus + new tool script in Selah repo. Toggle on for relevant tenants.
+
+Your personal Selah instance can have extra skills (blog posting, etc.) that aren't in the shared tenant skill set — just a bolus with an activation profile that only your agent sees.
+
+---
+
 ## Blockers
 
 - Anamnesis API must be running. Atlas should verify on startup and warn if unreachable.
 - Existing Atlas memories should be reviewed before migration to avoid importing stale knowledge.
+- F03-S01/S02 (per-agent profiles + injection routing) must be implemented before persona-specific injections work.
+- The `execute_skill` handler design is Atlas-side work — how the runtime parses SKILL.md and orchestrates internal tools.
