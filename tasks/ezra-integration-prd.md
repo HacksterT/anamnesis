@@ -1,22 +1,24 @@
 ---
-id: ATLAS-INT
-title: Atlas ↔ Anamnesis Integration
+id: EZRA-INT
+title: Ezra ↔ Anamnesis Integration
 status: draft
 created: 2026-04-12
 type: software
-for: Atlas repo
+for: ezra-assistant repo
 ---
 
-# Atlas ↔ Anamnesis Integration
+# Ezra ↔ Anamnesis Integration
 
-**Repo:** Atlas (TypeScript)
-**Depends on:** Anamnesis REST API running at `localhost:8741`
+**Repo:** ezra-assistant (Python, LangGraph)
+**Integration:** Anamnesis imported as library (same process). No HTTP API needed for agent ↔ knowledge communication.
 
 ## Overview
 
-**Problem:** Atlas currently manages memory through Claude Code's auto-memory system — scattered markdown files in `~/.claude/` with no structure, no curation, and no shared access. When Anamnesis replaces this, Atlas needs a way to consume knowledge injection, retrieve boluses on demand, and capture conversation episodes — all via HTTP from TypeScript.
+**Problem:** Ezra is a new multi-agent LangGraph runtime with three C-suite agents (CPO named Ezra, CTO TBD, CMO TBD). Each agent needs tailored knowledge injection, skill awareness, bolus retrieval, and conversation capture — all from Anamnesis.
 
-**Goal:** A TypeScript client for the Anamnesis API that lets Atlas: (1) fetch its assembled knowledge injection at session start, (2) retrieve full bolus content mid-conversation via the `retrieve_knowledge` tool, and (3) capture conversation turns and end sessions so the recency pipeline keeps working.
+**Goal:** Integrate Anamnesis as a library import. Each agent node calls `kf.get_injection(agent=...)` for per-agent knowledge. Skills are subgraphs with procedures stored as Anamnesis boluses. Dashboard served from the same FastAPI process. No separate Anamnesis API server needed.
+
+**Note:** This PRD was originally written for Atlas (TypeScript, HTTP). The TypeScript client sections are preserved as reference for any future non-Python consumer but are not needed for Ezra. The primary integration path is library import.
 
 ## Architecture
 

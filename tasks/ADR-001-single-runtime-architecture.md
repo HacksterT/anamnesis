@@ -9,34 +9,33 @@ feature: cross-cutting
 
 ## Context
 
-The current personal agent stack has three separate systems:
-- **Atlas** (TypeScript) — personal assistant with three personas (CTO, assistant, researcher), skill system, tool calls, auto-memory
-- **Selah-personal** (Python, Gemma 4) — theological knowledge base, new, minimal
+The current personal agent stack has fragmented systems:
+- **Atlas** (TypeScript) — personal assistant with personas, skill system, tool calls, auto-memory
 - **Anamnesis** (Python) — knowledge management framework with REST API, dashboard, CLI
+- **Selah** — Gemma 4 LLM instance (training on RunPod, will run on RunPod). Powers the external Voice of Repentance product for pastors.
 
-This creates architectural fragmentation: two languages, separate memory systems, HTTP bridges between Python and TypeScript, no shared runtime, and tool duplication.
-
-Meanwhile, **the-agency** repo already contains a working LangGraph multi-agent runtime with supervisor routing, subgraph-based skills, and tool registration — the exact architecture needed for the personal stack.
+This creates architectural fragmentation: two languages, separate memory systems, HTTP bridges between Python and TypeScript, and no shared runtime.
 
 ## Decision
 
-Consolidate into a **single LangGraph runtime** (forked from the-agency) with three C-suite agents. Anamnesis is imported as a library, not called over HTTP. Atlas is deprecated after migration.
+Build **Ezra** (`ezra-assistant` repo) — a new single LangGraph runtime with three C-suite agents. Anamnesis is imported as a library, not called over HTTP. Atlas is deprecated. Selah (Gemma 4) remains a separate LLM that may serve as a CompletionProvider for the CPO agent.
 
 ### Architecture
 
 ```
-Single LangGraph Runtime (Python)
+Ezra (ezra-assistant repo, single LangGraph runtime)
     │
     ├── Supervisor (intent routing)
     │
-    ├── CMO — Chief Marketing Officer
+    ├── CMO — Chief Marketing Officer (name TBD)
     │     Skills (subgraphs): content-creation, social-media, analytics, brand-voice
     │
-    ├── CTO — Chief Technical Officer
+    ├── CTO — Chief Technical Officer (name TBD)
     │     Skills (subgraphs): deep-research, code-review, infrastructure, deployment
     │
-    └── CPO — Chief Pastoral Officer (Selah-personal merged)
+    └── CPO — Chief Pastoral Officer (Ezra)
           Skills (subgraphs): scripture-search, commentary-lookup, study-guide, sermon-prep
+          May use Selah (Gemma 4) as CompletionProvider
     
 Knowledge layer:
     └── anamnesis (library import, same process)
@@ -91,23 +90,23 @@ Dashboard:
 
 ## Consequences
 
-- **Atlas is deprecated.** No new features. Existing functionality is migrated to LangGraph nodes. Atlas stays running until cutover is complete.
-- **The-agency repo becomes the foundation.** Fork or adapt its LangGraph runtime for the personal stack.
+- **Atlas is deprecated.** No new features. Ezra absorbs all functionality.
+- **Ezra is a new repo** (`ezra-assistant`), not a fork. Built on LangGraph patterns from the-agency.
 - **Anamnesis API server is not needed for personal use.** The library import path is primary. The API remains available for external consumers (Selah multi-tenant, future integrations).
 - **F03-S01/S02 (agent profiles + injection routing) is a prerequisite.** Per-agent injection must work before the three C-suite agents can get tailored knowledge.
 - **The Atlas integration PRD (Phase A) is still valid** as an interim step if Atlas needs Anamnesis before the LangGraph migration is complete. Phase B (transport layer inversion via HTTP) is superseded by this ADR — the inversion happens at the library/subgraph level instead.
 
-## Selah External (Multi-Tenant) — Separate Concern
+## Selah / Voice of Repentance (External Product) — Separate Concern
 
-This ADR applies to the personal stack only. Selah for external pastors remains a separate deployment:
-- Selah gateway imports Anamnesis as a library
-- Per-tenant `KnowledgeFramework` instances with isolated knowledge dirs
-- Gemma 4 (local) as CompletionProvider
-- Shared skill subgraphs across tenants
+This ADR applies to the personal stack (Ezra) only. The external pastoral product (Voice of Repentance, powered by Selah/Gemma 4) remains a separate deployment:
+- Its own gateway imports Anamnesis as a library
+- Per-tenant (per-pastor) `KnowledgeFramework` instances with isolated knowledge dirs
+- Selah (Gemma 4, RunPod) as the LLM
+- Shared skill subgraphs across tenants (pastors toggle on/off, don't create)
 - Its own dashboard or a tenant-aware Anamnesis dashboard
-- No connection to the personal LangGraph runtime
+- No connection to Ezra's runtime
 
-The personal CPO node and external Selah share skill definitions and Anamnesis as a library, but run in completely separate processes with separate knowledge.
+The CPO node inside Ezra and the external Selah product share Anamnesis as a library and may share pastoral skill definitions, but run in completely separate processes with separate knowledge.
 
 ---
 

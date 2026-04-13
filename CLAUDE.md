@@ -47,7 +47,7 @@ Phase 5: Metrics
 Phase 6: Circle 5 (behavioral mining)
 Phase 7: Vector search (only if needed)
 
-Pilot agents: Atlas (existing memories to migrate, Claude-based) and Selah (cold-start, local Gemma 4).
+Primary consumer: **Ezra** (ezra-assistant repo) — single LangGraph runtime with three C-suite agents (CPO named Ezra, CTO TBD, CMO TBD). Imports Anamnesis as a library. Selah is the Gemma 4 LLM (RunPod), not an agent. Atlas is deprecated.
 
 ## Story Dependency Chain
 
