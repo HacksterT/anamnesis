@@ -5,9 +5,13 @@
 	let { children } = $props();
 
 	const nav = [
-		{ href: '/', label: 'Boluses' },
-		{ href: '/injection', label: 'Injection' },
-		{ href: '/agents', label: 'Agents' }
+		{ href: '/', label: 'Framework', section: null },
+		{ href: '/circle-1', label: 'Circle 1: Core', section: 'circles' },
+		{ href: '/circle-2', label: 'Circle 2: Boluses', section: 'circles' },
+		{ href: '/circle-3', label: 'Circle 3: Curation', section: 'circles' },
+		{ href: '/circle-4', label: 'Circle 4: Episodic', section: 'circles' },
+		{ href: '/circle-5', label: 'Circle 5: Behavioral', section: 'circles' },
+		{ href: '/settings', label: 'Settings', section: null }
 	];
 </script>
 
@@ -22,9 +26,18 @@
 			<span class="version">v0.1.0</span>
 		</div>
 		<ul>
-			{#each nav as item}
+			{#each nav as item, i}
+				{#if i === 1}
+					<li class="section-label">Circles</li>
+				{/if}
+				{#if item.label === 'Settings'}
+					<li class="section-label spacer">System</li>
+				{/if}
 				<li>
-					<a href={item.href} class:active={page.url.pathname === item.href}>
+					<a
+						href={item.href}
+						class:active={page.url.pathname === item.href}
+					>
 						{item.label}
 					</a>
 				</li>
@@ -43,7 +56,7 @@
 	}
 
 	.sidebar {
-		width: 220px;
+		width: 240px;
 		background: var(--bg-surface);
 		border-right: 1px solid var(--border);
 		padding: 24px 16px;
@@ -66,7 +79,20 @@
 		margin-top: 32px;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 2px;
+	}
+
+	.section-label {
+		font-size: 0.65rem;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--text-muted);
+		padding: 16px 12px 6px;
+		opacity: 0.6;
+	}
+
+	.section-label.spacer {
+		margin-top: 8px;
 	}
 
 	a {
@@ -74,7 +100,7 @@
 		padding: 8px 12px;
 		border-radius: var(--radius);
 		color: var(--text-muted);
-		font-size: 0.9rem;
+		font-size: 0.85rem;
 		transition: all 0.15s;
 	}
 

@@ -78,16 +78,21 @@
 </script>
 
 <div class="page-header">
-	<h2>Agent Registry</h2>
+	<h2>Settings</h2>
 	<div class="header-right">
 		<div class="status-dot" class:online={connected}>
 			{connected ? `API v${version}` : 'API Offline'}
 		</div>
+	</div>
+</div>
+
+<section class="settings-section">
+	<div class="section-header">
+		<h3>Agents</h3>
 		<button class="btn-primary" onclick={() => (showCreate = !showCreate)}>
 			{showCreate ? 'Cancel' : '+ New Agent'}
 		</button>
 	</div>
-</div>
 
 {#if error}
 	<div class="error-banner">{error}</div>
@@ -166,8 +171,25 @@
 		{/each}
 	</div>
 {/if}
+</section>
 
 <style>
+	.settings-section {
+		margin-top: 24px;
+	}
+
+	.section-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 20px;
+	}
+
+	.section-header h3 {
+		font-size: 1.2rem;
+		font-weight: 600;
+	}
+
 	.page-header {
 		display: flex;
 		justify-content: space-between;

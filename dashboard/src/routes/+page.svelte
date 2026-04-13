@@ -1,369 +1,346 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import {
-		listBoluses,
-		activateBolus,
-		deactivateBolus,
-		deleteBolus,
-		createBolus,
-		type BolusMetadata
-	} from '$lib/api';
+	import { getHealth } from '$lib/api';
 
-	let boluses = $state<BolusMetadata[]>([]);
-	let showAll = $state(false);
-	let filterTag = $state('');
-	let filterRender = $state('');
-	let loading = $state(true);
-	let error = $state('');
+	let connected = $state(false);
+	let version = $state('');
 
-	// Create form
-	let showCreate = $state(false);
-	let newId = $state('');
-	let newTitle = $state('');
-	let newSummary = $state('');
-	let newRender = $state<'inline' | 'reference'>('reference');
-	let newPriority = $state(50);
-	let newTags = $state('');
-	let newContent = $state('');
-
-	async function load() {
-		loading = true;
-		error = '';
+	onMount(async () => {
 		try {
-			boluses = await listBoluses(!showAll);
-		} catch (e) {
-			error = 'Failed to connect to Anamnesis API. Is the server running?';
+			const health = await getHealth();
+			connected = true;
+			version = health.version;
+		} catch {
+			connected = false;
 		}
-		loading = false;
-	}
+	});
 
-	onMount(load);
-
-	async function toggle(b: BolusMetadata) {
-		if (b.active) {
-			await deactivateBolus(b.id);
-		} else {
-			await activateBolus(b.id);
+	const circles = [
+		{
+			number: 5,
+			name: 'Behavioral Mining',
+			color: '#4a5568',
+			radius: 200,
+			description:
+				'Outermost circle. Micro-pipelines observe patterns from raw data \u2014 OS usage, study habits, communication preferences. Observations accumulate until confidence thresholds are met, then compile into curation candidates.',
+			status: 'Planned (Phase 6)'
+		},
+		{
+			number: 4,
+			name: 'Episodic Capture',
+			color: '#6c8cff',
+			radius: 160,
+			description:
+				'Raw conversation turns stored in SQLite. The recency pipeline automatically summarizes the latest session into Circle 1, giving the agent short-term memory. Configurable retention.',
+			status: 'Implemented'
+		},
+		{
+			number: 3,
+			name: 'Curation Queue',
+			color: '#fbbf24',
+			radius: 120,
+			description:
+				'The staging area. Facts extracted from episodes land here for review. Confirm promotes to Circle 2. Reject discards. Defer keeps for later. The permissiveness slider controls how much autonomy the system has.',
+			status: 'Planned (Phase 3\u20134)'
+		},
+		{
+			number: 2,
+			name: 'Knowledge Boluses',
+			color: '#4ade80',
+			radius: 80,
+			description:
+				'The confirmed knowledge library. Each bolus is a curated markdown file with YAML frontmatter. Inline boluses appear directly in the injection. Reference boluses are summarized with retrieval pointers.',
+			status: 'Implemented'
+		},
+		{
+			number: 1,
+			name: 'Core Injection',
+			color: '#f87171',
+			radius: 40,
+			description:
+				'The center. A single markdown file (anamnesis.md) assembled from active boluses and injected into the LLM system prompt. Token-budgeted. What the agent reads on every turn.',
+			status: 'Implemented'
 		}
-		await load();
-	}
-
-	async function remove(id: string) {
-		await deleteBolus(id);
-		await load();
-	}
-
-	async function handleCreate() {
-		try {
-			await createBolus({
-				id: newId,
-				title: newTitle || undefined,
-				summary: newSummary,
-				content: newContent,
-				render: newRender,
-				priority: newPriority,
-				tags: newTags.split(',').map((t) => t.trim()).filter(Boolean)
-			});
-			showCreate = false;
-			newId = newTitle = newSummary = newContent = newTags = '';
-			newRender = 'reference';
-			newPriority = 50;
-			await load();
-		} catch (e: any) {
-			error = e.message;
-		}
-	}
-
-	let allTags = $derived(
-		[...new Set(boluses.flatMap((b) => b.tags || []))].sort()
-	);
-
-	let filtered = $derived(
-		boluses.filter((b) => {
-			if (filterTag && !(b.tags || []).includes(filterTag)) return false;
-			if (filterRender && b.render !== filterRender) return false;
-			return true;
-		})
-	);
+	];
 </script>
 
-<div class="page-header">
-	<h2>Knowledge Boluses</h2>
-	<div class="actions">
-		<label class="toggle-label">
-			<input type="checkbox" bind:checked={showAll} onchange={load} />
-			Show inactive
-		</label>
-		<button class="btn-primary" onclick={() => (showCreate = !showCreate)}>
-			{showCreate ? 'Cancel' : '+ New Bolus'}
-		</button>
+<div class="framework-page">
+	<div class="hero">
+		<h2>Anamnesis Framework</h2>
+		<p class="subtitle">
+			Knowledge flows inward through curation. Raw data enters at the outer circles and is
+			refined, confirmed, and compressed as it moves toward the core.
+		</p>
+		{#if connected}
+			<span class="api-badge online">API v{version}</span>
+		{:else}
+			<span class="api-badge offline">API Offline</span>
+		{/if}
 	</div>
-</div>
 
-{#if error}
-	<div class="error-banner">{error}</div>
-{/if}
-
-{#if showCreate}
-	<div class="create-form">
-		<div class="form-row">
-			<input bind:value={newId} placeholder="bolus-id (slug)" />
-			<input bind:value={newTitle} placeholder="Title (optional)" />
-		</div>
-		<input bind:value={newSummary} placeholder="Summary (one line)" />
-		<textarea bind:value={newContent} placeholder="Bolus content (markdown)" rows="6"></textarea>
-		<div class="form-row">
-			<select bind:value={newRender}>
-				<option value="reference">Reference</option>
-				<option value="inline">Inline</option>
-			</select>
-			<label>
-				Priority
-				<input type="number" bind:value={newPriority} min="1" max="100" style="width:80px" />
-			</label>
-			<input bind:value={newTags} placeholder="Tags (comma-separated)" />
-			<button class="btn-primary" onclick={handleCreate}>Create</button>
+	<div class="principles">
+		<h3>Design Principles</h3>
+		<div class="principle-grid">
+			<div class="principle">
+				<strong>Curation over accumulation</strong>
+				<p>Every fact is reviewed before it reaches the agent. Knowledge is curated, not dumped. No context stuffing.</p>
+			</div>
+			<div class="principle">
+				<strong>Token budget discipline</strong>
+				<p>The injection has hard limits. Boluses carry summaries; the agent retrieves full details on demand. You control what fits.</p>
+			</div>
+			<div class="principle">
+				<strong>One primitive: the bolus</strong>
+				<p>Identity, facts, skills, constraints, expert personas — everything is a knowledge bolus with a render mode and tags. Simple to reason about.</p>
+			</div>
+			<div class="principle">
+				<strong>LLM-agnostic</strong>
+				<p>Any model reads anamnesis.md. The retrieve_knowledge tool works with Claude, GPT, Gemma, or any agent framework. No vendor lock-in.</p>
+			</div>
 		</div>
 	</div>
-{/if}
 
-<div class="filters">
-	{#if allTags.length > 0}
-		<select bind:value={filterTag}>
-			<option value="">All tags</option>
-			{#each allTags as tag}
-				<option value={tag}>{tag}</option>
+	<div class="diagram-section">
+		<h3 class="section-title">The Five-Circle Model</h3>
+		<p class="section-subtitle">Knowledge flows inward through curation — from raw observations to the agent's working memory.</p>
+		<svg viewBox="0 0 500 500" class="circle-diagram">
+			{#each circles as circle}
+				<circle
+					cx="250"
+					cy="250"
+					r={circle.radius}
+					fill="none"
+					stroke={circle.color}
+					stroke-width="2"
+					opacity="0.3"
+				/>
+				<circle
+					cx="250"
+					cy="250"
+					r={circle.radius}
+					fill={circle.color}
+					opacity="0.06"
+				/>
 			{/each}
-		</select>
-	{/if}
-	<select bind:value={filterRender}>
-		<option value="">All render modes</option>
-		<option value="inline">Inline</option>
-		<option value="reference">Reference</option>
-	</select>
-	<span class="count">{filtered.length} bolus{filtered.length !== 1 ? 'es' : ''}</span>
-</div>
 
-{#if loading}
-	<p class="muted">Loading...</p>
-{:else if filtered.length === 0}
-	<p class="muted">No boluses found.</p>
-{:else}
-	<div class="bolus-list">
-		{#each filtered as b (b.id)}
-			<div class="bolus-card" class:inactive={!b.active}>
+			<!-- Labels on the circles -->
+			<text x="250" y="250" text-anchor="middle" dy="0.35em" fill="#f87171" font-size="11" font-weight="600">
+				C1: Core
+			</text>
+			<text x="250" y="200" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="500">
+				C2: Boluses
+			</text>
+			<text x="250" y="155" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="500">
+				C3: Curation
+			</text>
+			<text x="250" y="112" text-anchor="middle" fill="#6c8cff" font-size="10" font-weight="500">
+				C4: Episodic
+			</text>
+			<text x="250" y="68" text-anchor="middle" fill="#4a5568" font-size="10" font-weight="500">
+				C5: Behavioral
+			</text>
+
+			<!-- Flow arrows (inward) -->
+			<defs>
+				<marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5"
+					markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+					<path d="M 0 0 L 10 5 L 0 10 z" fill="var(--text-muted)" opacity="0.5" />
+				</marker>
+			</defs>
+
+			<!-- Right side flow arrows -->
+			<line x1="440" y1="300" x2="410" y2="290" stroke="var(--text-muted)" stroke-width="1" opacity="0.3" marker-end="url(#arrow)" />
+			<line x1="400" y1="300" x2="370" y2="290" stroke="var(--text-muted)" stroke-width="1" opacity="0.3" marker-end="url(#arrow)" />
+			<line x1="360" y1="300" x2="335" y2="290" stroke="var(--text-muted)" stroke-width="1" opacity="0.3" marker-end="url(#arrow)" />
+			<line x1="320" y1="295" x2="300" y2="285" stroke="var(--text-muted)" stroke-width="1" opacity="0.3" marker-end="url(#arrow)" />
+
+			<!-- "Knowledge flows inward" label -->
+			<text x="420" y="340" text-anchor="middle" fill="var(--text-muted)" font-size="8" opacity="0.5">
+				knowledge flows inward
+			</text>
+			<text x="420" y="350" text-anchor="middle" fill="var(--text-muted)" font-size="8" opacity="0.5">
+				through curation
+			</text>
+		</svg>
+	</div>
+
+	<div class="circle-cards">
+		{#each circles.toReversed() as circle}
+			<div class="circle-card">
 				<div class="card-header">
-					<div class="card-title">
-						<strong>{b.title || b.id}</strong>
-						<span class="render-badge" class:inline={b.render === 'inline'}>
-							{b.render}
-						</span>
-						<span class="priority">P{b.priority}</span>
+					<div class="circle-badge" style="background: {circle.color}20; color: {circle.color}; border-color: {circle.color}40;">
+						Circle {circle.number}
 					</div>
-					<label class="switch">
-						<input type="checkbox" checked={b.active} onchange={() => toggle(b)} />
-						<span class="slider"></span>
-					</label>
+					<h3>{circle.name}</h3>
+					<span class="status-badge" class:implemented={circle.status === 'Implemented'}>
+						{circle.status}
+					</span>
 				</div>
-				<p class="summary">{b.summary}</p>
-				<div class="card-footer">
-					<div class="tags">
-						{#each b.tags || [] as tag}
-							<span class="tag">{tag}</span>
-						{/each}
-					</div>
-					<div class="card-actions">
-						<span class="date">{b.updated}</span>
-						<button class="btn-danger-sm" onclick={() => remove(b.id)}>Delete</button>
-					</div>
-				</div>
+				<p>{circle.description}</p>
 			</div>
 		{/each}
 	</div>
-{/if}
+
+</div>
 
 <style>
-	.actions {
-		display: flex;
-		gap: 16px;
-		align-items: center;
+	.framework-page {
+		max-width: 900px;
 	}
 
-	.toggle-label {
-		font-size: 0.85rem;
-		color: var(--text-muted);
-		display: flex;
-		align-items: center;
-		gap: 6px;
+	.hero {
+		margin-bottom: 40px;
 	}
 
-	input, textarea, select {
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		color: var(--text);
-		padding: 8px 12px;
-		font-size: 0.9rem;
-		flex: 1;
-	}
-
-	textarea {
-		resize: vertical;
-		font-family: var(--font-mono);
-		font-size: 0.85rem;
-	}
-
-	.filters {
-		display: flex;
-		gap: 12px;
-		align-items: center;
-		margin-bottom: 20px;
-	}
-
-	.filters select {
-		flex: 0 0 auto;
-		width: auto;
-	}
-
-	.count {
-		font-size: 0.85rem;
-		color: var(--text-muted);
-		margin-left: auto;
-	}
-
-	.bolus-list {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
-
-	.bolus-card {
-		background: var(--bg-surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 16px 20px;
-		transition: border-color 0.15s;
-	}
-
-	.bolus-card:hover {
-		border-color: var(--accent);
-	}
-
-	.bolus-card.inactive {
-		opacity: 0.5;
-	}
-
-	.card-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
+	h2 {
+		font-size: 1.6rem;
+		font-weight: 700;
 		margin-bottom: 8px;
 	}
 
-	.card-title {
-		display: flex;
-		align-items: center;
-		gap: 10px;
+	.subtitle {
+		color: var(--text-muted);
+		font-size: 1rem;
+		line-height: 1.6;
+		max-width: 600px;
+		margin-bottom: 12px;
 	}
 
-	.render-badge {
-		font-size: 0.7rem;
-		padding: 2px 8px;
-		border-radius: 10px;
-		background: rgba(108, 140, 255, 0.15);
-		color: var(--accent);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+	.api-badge {
+		display: inline-block;
+		font-size: 0.75rem;
+		padding: 3px 10px;
+		border-radius: 12px;
 	}
 
-	.render-badge.inline {
+	.api-badge.online {
 		background: rgba(74, 222, 128, 0.15);
 		color: var(--success);
 	}
 
-	.priority {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		font-family: var(--font-mono);
+	.api-badge.offline {
+		background: rgba(248, 113, 113, 0.15);
+		color: var(--danger);
 	}
 
-	.summary {
+	.section-title {
+		font-size: 1.2rem;
+		font-weight: 600;
+		margin-bottom: 6px;
+	}
+
+	.section-subtitle {
+		color: var(--text-muted);
 		font-size: 0.9rem;
-		color: var(--text-muted);
-		margin-bottom: 12px;
+		margin-bottom: 24px;
 	}
 
-	.card-footer {
+	.diagram-section {
+		margin-bottom: 48px;
+	}
+
+	.diagram-section svg {
+		display: block;
+		margin: 0 auto;
+	}
+
+	.circle-diagram {
+		width: 100%;
+		max-width: 500px;
+		height: auto;
+	}
+
+	.circle-cards {
 		display: flex;
-		justify-content: space-between;
+		flex-direction: column;
+		gap: 12px;
+		margin-bottom: 48px;
+	}
+
+	.circle-card {
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 20px;
+	}
+
+	.card-header {
+		display: flex;
 		align-items: center;
+		gap: 12px;
+		margin-bottom: 10px;
 	}
 
-	.tags {
-		display: flex;
-		gap: 6px;
-	}
-
-	.tag {
+	.circle-badge {
 		font-size: 0.7rem;
-		padding: 2px 8px;
+		font-weight: 600;
+		padding: 3px 10px;
+		border-radius: 10px;
+		border: 1px solid;
+		white-space: nowrap;
+	}
+
+	.card-header h3 {
+		font-size: 1rem;
+		font-weight: 600;
+		flex: 1;
+	}
+
+	.status-badge {
+		font-size: 0.7rem;
+		padding: 3px 10px;
 		border-radius: 10px;
 		background: var(--bg-hover);
 		color: var(--text-muted);
+		white-space: nowrap;
 	}
 
-	.card-actions {
-		display: flex;
-		gap: 12px;
-		align-items: center;
+	.status-badge.implemented {
+		background: rgba(74, 222, 128, 0.15);
+		color: var(--success);
 	}
 
-	.date {
-		font-size: 0.75rem;
+	.circle-card p {
+		font-size: 0.9rem;
 		color: var(--text-muted);
+		line-height: 1.6;
 	}
 
-	/* Toggle switch */
-	.switch {
-		position: relative;
-		display: inline-block;
-		width: 40px;
-		height: 22px;
+	.principles {
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 24px;
+		margin-bottom: 48px;
 	}
 
-	.switch input {
-		opacity: 0;
-		width: 0;
-		height: 0;
+	.principles h3 {
+		font-size: 1.1rem;
+		font-weight: 600;
+		margin-bottom: 20px;
 	}
 
-	.slider {
-		position: absolute;
-		cursor: pointer;
-		inset: 0;
-		background: var(--border);
-		border-radius: 22px;
-		transition: 0.2s;
+	.principle-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 20px;
 	}
 
-	.slider::before {
-		content: '';
-		position: absolute;
-		height: 16px;
-		width: 16px;
-		left: 3px;
-		bottom: 3px;
-		background: var(--text);
-		border-radius: 50%;
-		transition: 0.2s;
+	.principle {
+		padding: 16px;
+		background: var(--bg);
+		border-radius: var(--radius);
 	}
 
-	.switch input:checked + .slider {
-		background: var(--accent);
+	.principle strong {
+		display: block;
+		margin-bottom: 6px;
+		font-size: 0.9rem;
 	}
 
-	.switch input:checked + .slider::before {
-		transform: translateX(18px);
+	.principle p {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		line-height: 1.5;
 	}
-
 </style>
