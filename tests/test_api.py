@@ -142,9 +142,11 @@ def test_update_bolus(seeded_client: TestClient) -> None:
     assert "Updated content here." in r.json()["content"]
 
 
-def test_update_bolus_not_found(client: TestClient) -> None:
+def test_upsert_bolus_creates_when_not_found(client: TestClient) -> None:
+    # PUT now has upsert semantics: creates the bolus if it doesn't exist.
     r = client.put("/v1/knowledge/boluses/nonexistent", json={"content": "x"})
-    assert r.status_code == 404
+    assert r.status_code == 201
+    assert r.json()["status"] == "created"
 
 
 def test_delete_bolus(seeded_client: TestClient) -> None:

@@ -34,16 +34,15 @@ def assemble(
     if counter is None:
         counter = SimpleTokenCounter()
 
-    # Get all boluses (active and inactive) if we have agent overrides
+    # Load all boluses once; filter for assembly
+    all_boluses_unfiltered = store.list(active_only=False)
     if agent_active_boluses:
-        all_boluses = store.list(active_only=False)
-        boluses = []
-        for b in all_boluses:
-            bid = b.get("id", "")
-            if b.get("active", True) or bid in agent_active_boluses:
-                boluses.append(b)
+        boluses = [
+            b for b in all_boluses_unfiltered
+            if b.get("active", True) or b.get("id", "") in agent_active_boluses
+        ]
     else:
-        boluses = store.list(active_only=True)
+        boluses = [b for b in all_boluses_unfiltered if b.get("active", True)]
 
     # Filter recency boluses by agent
     if agent:
@@ -90,8 +89,10 @@ def assemble(
     inner = "\n\n".join(parts)
     text = f"<knowledge>\n{inner}\n</knowledge>"
 
-    # Budget check
+    # Budget check — populate bolus counts so callers don't need a second store.list()
     budget = check_budget(text, counter, soft_max, hard_ceiling)
+    budget.total_boluses = len(all_boluses_unfiltered)
+    budget.active_boluses = sum(1 for b in all_boluses_unfiltered if b.get("active", True))
 
     if budget.status == "exceeded":
         raise ValueError(

@@ -1,7 +1,7 @@
 ---
 id: F03
 title: Agent Profiles, Injection Routing & Compilation Pipeline
-status: draft
+status: done
 created: 2026-04-12
 ---
 
@@ -37,11 +37,11 @@ Phase 3 has two halves:
 
 | ID | Title | Priority | Status |
 |----|-------|----------|--------|
-| F03-S01 | Per-Agent Bolus Activation Profiles | Must-Have | Backlog |
-| F03-S02 | Injection Routing & Recency Isolation | Must-Have | Backlog |
-| F03-S03 | Circle 3 Schema & Curation Queue | Must-Have | Backlog |
-| F03-S04 | Compilation Pipeline (Circle 4 → Circle 3) | Must-Have | Backlog |
-| F03-S05 | Technical Debt Cleanup | Should-Have | Backlog |
+| F03-S01 | Per-Agent Bolus Activation Profiles | Must-Have | Done |
+| F03-S02 | Injection Routing & Recency Isolation | Must-Have | Done |
+| F03-S03 | Circle 3 Schema & Curation Queue | Must-Have | Done |
+| F03-S04 | Compilation Pipeline (Circle 4 → Circle 3) | Must-Have | Done |
+| F03-S05 | Technical Debt Cleanup | Should-Have | Done |
 
 ## Non-Goals
 

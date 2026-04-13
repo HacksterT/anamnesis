@@ -190,17 +190,8 @@
 		font-weight: 600;
 	}
 
-	.page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 24px;
-	}
-
-	h2 {
-		font-size: 1.4rem;
-		font-weight: 600;
-	}
+	/* .page-header, .error-banner, .muted, .create-form, .form-row,
+	   .btn-primary, .btn-danger-sm — defined in app.css */
 
 	h3 {
 		font-size: 1.1rem;
@@ -237,30 +228,6 @@
 		background: var(--success);
 	}
 
-	.error-banner {
-		background: rgba(248, 113, 113, 0.1);
-		border: 1px solid var(--danger);
-		color: var(--danger);
-		padding: 12px 16px;
-		border-radius: var(--radius);
-		margin-bottom: 16px;
-		font-size: 0.9rem;
-	}
-
-	.create-form {
-		background: var(--bg-surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 20px;
-		margin-bottom: 24px;
-	}
-
-	.form-row {
-		display: flex;
-		gap: 12px;
-		align-items: center;
-	}
-
 	input {
 		background: var(--bg);
 		border: 1px solid var(--border);
@@ -278,11 +245,6 @@
 		align-items: center;
 		gap: 8px;
 		flex-shrink: 0;
-	}
-
-	.muted {
-		color: var(--text-muted);
-		font-size: 0.9rem;
 	}
 
 	.empty-state {
@@ -396,31 +358,4 @@
 		margin-top: 4px;
 	}
 
-	.btn-primary {
-		background: var(--accent);
-		color: white;
-		border: none;
-		padding: 8px 16px;
-		border-radius: var(--radius);
-		font-size: 0.85rem;
-		font-weight: 500;
-		flex-shrink: 0;
-	}
-
-	.btn-primary:hover {
-		background: var(--accent-hover);
-	}
-
-	.btn-danger-sm {
-		background: none;
-		border: 1px solid var(--danger);
-		color: var(--danger);
-		padding: 4px 10px;
-		border-radius: var(--radius);
-		font-size: 0.75rem;
-	}
-
-	.btn-danger-sm:hover {
-		background: rgba(248, 113, 113, 0.1);
-	}
 </style>

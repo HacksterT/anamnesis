@@ -7,6 +7,7 @@ from pathlib import Path
 from anamnesis.bolus.base import BolusStore
 from anamnesis.bolus.store import is_valid_bolus_id, validate_bolus_id, slugify
 from anamnesis.config import KnowledgeConfig
+from anamnesis.exceptions import BolusExistsError, BolusNotFoundError, CircleNotConfiguredError
 
 
 class KnowledgeFramework:
@@ -16,6 +17,8 @@ class KnowledgeFramework:
         self.config = config
         self._store = self._init_store()
         self._episode_store = self._init_episode_store()
+        self._curation_store = self._init_curation_store()
+        self._completion_provider = self._init_completion_provider()
         self._current_turns: list = []
         self._session_started: str | None = None
 
@@ -39,6 +42,25 @@ class KnowledgeFramework:
         db_path = self.config.circle4_root / "anamnesis.db"
         return EpisodeStore(db_path)
 
+    def _init_curation_store(self):
+        if self.config.circle4_root is None:
+            return None
+        from anamnesis.curation.store import CurationStore
+
+        db_path = self.config.circle4_root / "anamnesis.db"
+        return CurationStore(db_path)
+
+    def _init_completion_provider(self):
+        if self.config.completion_provider_type == "openai_compatible":
+            from anamnesis.completion.openai_compat import OpenAICompatibleProvider
+
+            return OpenAICompatibleProvider(
+                base_url=self.config.completion_provider_base_url or "",
+                model=self.config.completion_provider_model or "",
+                api_key=self.config.completion_provider_api_key,
+            )
+        return None
+
     # ─── Circle 2: Bolus CRUD ──────────────────────────────────────
 
     def create_bolus(
@@ -57,7 +79,7 @@ class KnowledgeFramework:
         validate_bolus_id(bolus_id)
 
         if self._store.exists(bolus_id):
-            raise ValueError(f"Bolus {bolus_id!r} already exists.")
+            raise BolusExistsError(bolus_id)
 
         metadata = {
             "id": bolus_id,
@@ -98,6 +120,50 @@ class KnowledgeFramework:
 
     def get_bolus_metadata(self, bolus_id: str) -> dict:
         return self._store.get_metadata(bolus_id)
+
+    def upsert_bolus(
+        self,
+        bolus_id: str,
+        content: str,
+        *,
+        title: str | None = None,
+        summary: str | None = None,
+        render: str = "reference",
+        priority: int = 50,
+        tags: list[str] | None = None,
+    ) -> str:
+        """Create or replace a bolus.
+
+        If the bolus exists, its content is replaced and metadata is preserved.
+        If it does not exist, a new bolus is created with the provided (or default) metadata.
+        Returns "created" or "updated".
+        """
+        bolus_id = bolus_id if is_valid_bolus_id(bolus_id) else slugify(bolus_id)
+        validate_bolus_id(bolus_id)
+
+        if self._store.exists(bolus_id):
+            self.update_bolus(bolus_id, content)
+            return "updated"
+
+        self.create_bolus(
+            bolus_id,
+            content,
+            title=title,
+            summary=summary or "",
+            render=render,
+            priority=priority,
+            tags=tags,
+        )
+        return "created"
+
+    def append_bolus(
+        self, bolus_id: str, content: str, separator: str = "\n\n---\n\n"
+    ) -> None:
+        """Append content to an existing bolus.
+
+        Raises KeyError if the bolus does not exist.
+        """
+        self._store.append(bolus_id, content, separator)
 
     def retrieve(self, bolus_id: str) -> str:
         """Retrieve bolus content by categorical pointer."""
@@ -157,9 +223,6 @@ class KnowledgeFramework:
             agent_active_boluses=profile,
         )
 
-        all_boluses = self._store.list(active_only=False)
-        active_boluses = [b for b in all_boluses if b.get("active", True)]
-
         recency_id = recency_bolus_id(agent)
         recency_tokens = 0
         if self._store.exists(recency_id):
@@ -172,8 +235,8 @@ class KnowledgeFramework:
             "hard_ceiling": budget.hard_ceiling,
             "utilization_pct": budget.utilization_pct,
             "status": budget.status,
-            "active_boluses": len(active_boluses),
-            "total_boluses": len(all_boluses),
+            "active_boluses": budget.active_boluses,
+            "total_boluses": budget.total_boluses,
             "recency_tokens": recency_tokens,
             "recency_budget": self.config.recency_budget,
             "agent": agent,
@@ -260,8 +323,122 @@ class KnowledgeFramework:
             return []
         return self._episode_store.list(agent=agent)
 
+    # ─── Circle 3: Curation Queue ──────────────────────────────
+
+    def _require_curation_store(self):
+        if self._curation_store is None:
+            raise CircleNotConfiguredError(3, "circle4_root must be set.")
+        return self._curation_store
+
+    def stage(
+        self,
+        fact: str,
+        *,
+        source_episode: str | None = None,
+        source_agent: str | None = None,
+        source_url: str | None = None,
+        suggested_bolus: str | None = None,
+        confidence: float = 0.5,
+    ) -> int:
+        """Deposit a candidate fact in the Circle 3 curation queue.
+
+        Returns the new item id. Used by the compilation pipeline (Circle 4 → Circle 3)
+        and by external agents via the REST API (F04-S02).
+        """
+        store = self._require_curation_store()
+        return store.stage(
+            fact,
+            source_episode=source_episode,
+            source_agent=source_agent,
+            source_url=source_url,
+            suggested_bolus=suggested_bolus,
+            confidence=confidence,
+        )
+
+    def get_curation_queue(self, limit: int = 50) -> list[dict]:
+        """Return pending curation items ordered by confidence descending."""
+        store = self._require_curation_store()
+        items = store.list_pending(limit=limit)
+        return [
+            {
+                "id": item.id,
+                "fact": item.fact,
+                "source_episode": item.source_episode,
+                "source_agent": item.source_agent,
+                "source_url": item.source_url,
+                "suggested_bolus": item.suggested_bolus,
+                "confidence": item.confidence,
+                "status": item.status,
+                "created": item.created,
+            }
+            for item in items
+        ]
+
+    def confirm(self, item_id: int, bolus_id: str) -> None:
+        """Promote a curation item to a Circle 2 bolus.
+
+        Appends the fact text to the target bolus (creates the bolus if it
+        doesn't exist), then marks the queue item as confirmed.
+        """
+        store = self._require_curation_store()
+        item = store.get(item_id)
+        self.append_bolus(bolus_id, item.fact) if self._store.exists(bolus_id) else \
+            self.create_bolus(bolus_id, item.fact, summary=f"Promoted from curation queue.")
+        store.confirm(item_id)
+
+    def reject(self, item_id: int) -> None:
+        """Reject a curation item — marks as rejected, stays in DB for audit."""
+        store = self._require_curation_store()
+        store.reject(item_id)
+
+    def defer(self, item_id: int) -> None:
+        """Defer a curation item — keeps it pending but deprioritized."""
+        store = self._require_curation_store()
+        store.defer(item_id)
+
+    # ─── Compilation Pipeline (Circle 4 → Circle 3) ────────────
+
+    def compile(
+        self,
+        agent: str | None = None,
+        provider=None,
+    ) -> dict:
+        """Extract facts from uncompiled episodes and deposit in Circle 3.
+
+        A CompletionProvider is required — pass one explicitly or configure
+        `completion_provider` in anamnesis.yaml. Raises RuntimeError if neither
+        is available (no heuristic fallback for extraction).
+
+        Returns a summary dict: {episodes_processed, facts_extracted, errors}.
+        """
+        if self._episode_store is None:
+            raise CircleNotConfiguredError(4, "circle4_root must be set.")
+        curation_store = self._require_curation_store()
+
+        effective_provider = provider or self._completion_provider
+        if effective_provider is None:
+            raise RuntimeError(
+                "Compilation requires a CompletionProvider. "
+                "Pass one to compile() or configure completion_provider in anamnesis.yaml."
+            )
+
+        from anamnesis.compile.pipeline import compile_episodes
+
+        result = compile_episodes(
+            episode_store=self._episode_store,
+            curation_store=curation_store,
+            bolus_store=self._store,
+            provider=effective_provider,
+            agent=agent,
+        )
+        return {
+            "episodes_processed": result.episodes_processed,
+            "facts_extracted": result.facts_extracted,
+            "errors": result.errors,
+        }
+
     def get_episode(self, session_id: str):
         """Get a full episode with turns. Raises RuntimeError if Circle 4 not configured."""
         if self._episode_store is None:
-            raise RuntimeError("Circle 4 is not configured.")
+            raise CircleNotConfiguredError(4)
         return self._episode_store.load(session_id)

@@ -83,6 +83,41 @@ def main(argv: list[str] | None = None) -> None:
     bl_deactivate.add_argument("bolus_id", type=str)
     bl_deactivate.add_argument("--config", type=str, default=None)
 
+    bl_append = bolus_sub.add_parser("append", help="Append content to an existing bolus")
+    bl_append.add_argument("bolus_id", type=str)
+    bl_append.add_argument("--file", type=str, default=None, help="Read content from file")
+    bl_append.add_argument("--content", type=str, default=None, help="Content to append (inline)")
+    bl_append.add_argument("--separator", type=str, default="\n\n---\n\n", help="Section separator")
+    bl_append.add_argument("--config", type=str, default=None)
+
+    # ─── compile ──────────────────────────────────────────────
+    compile_p = sub.add_parser("compile", help="Run compilation pipeline (Circle 4 → Circle 3)")
+    compile_p.add_argument("--agent", type=str, default=None, help="Compile only this agent's episodes")
+    compile_p.add_argument("--config", type=str, default=None)
+
+    # ─── curation ─────────────────────────────────────────────
+    curation_p = sub.add_parser("curation", help="Manage Circle 3 curation queue")
+    curation_sub = curation_p.add_subparsers(dest="curation_command")
+
+    cur_list = curation_sub.add_parser("list", help="List pending curation items")
+    cur_list.add_argument("--limit", type=int, default=20)
+    cur_list.add_argument("--json", dest="as_json", action="store_true")
+    cur_list.add_argument("--config", type=str, default=None)
+
+    cur_confirm = curation_sub.add_parser("confirm", help="Promote a fact to a bolus")
+    cur_confirm.add_argument("item_id", type=int)
+    cur_confirm.add_argument("--bolus", type=str, required=True, dest="bolus_id",
+                             help="Target bolus ID")
+    cur_confirm.add_argument("--config", type=str, default=None)
+
+    cur_reject = curation_sub.add_parser("reject", help="Reject a curation item")
+    cur_reject.add_argument("item_id", type=int)
+    cur_reject.add_argument("--config", type=str, default=None)
+
+    cur_defer = curation_sub.add_parser("defer", help="Defer a curation item")
+    cur_defer.add_argument("item_id", type=int)
+    cur_defer.add_argument("--config", type=str, default=None)
+
     # ─── agent ────────────────────────────────────────────────
     agent_p = sub.add_parser("agent", help="Manage agents")
     agent_sub = agent_p.add_subparsers(dest="agent_command")
@@ -115,6 +150,8 @@ def main(argv: list[str] | None = None) -> None:
         "validate": _cmd_validate,
         "metrics": _cmd_metrics,
         "bolus": _cmd_bolus,
+        "compile": _cmd_compile,
+        "curation": _cmd_curation,
         "agent": _cmd_agent,
     }
     dispatch[args.command](args)
@@ -236,7 +273,7 @@ def _cmd_metrics(args) -> None:
 
 def _cmd_bolus(args) -> None:
     if args.bolus_command is None:
-        print("Usage: anamnesis bolus {list,show,create,update,delete,activate,deactivate}", file=sys.stderr)
+        print("Usage: anamnesis bolus {list,show,create,update,delete,activate,deactivate,append}", file=sys.stderr)
         sys.exit(1)
 
     dispatch = {
@@ -247,6 +284,7 @@ def _cmd_bolus(args) -> None:
         "delete": _bolus_delete,
         "activate": _bolus_activate,
         "deactivate": _bolus_deactivate,
+        "append": _bolus_append,
     }
     dispatch[args.bolus_command](args)
 
@@ -363,6 +401,123 @@ def _bolus_activate(args) -> None:
 
 def _bolus_deactivate(args) -> None:
     _bolus_set_active(args, False, "Deactivated")
+
+
+def _bolus_append(args) -> None:
+    kf = _load_framework(args.config)
+
+    if args.file:
+        content = Path(args.file).read_text(encoding="utf-8")
+    elif args.content:
+        content = args.content
+    else:
+        print("Provide --file or --content.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        kf.append_bolus(args.bolus_id, content, separator=args.separator)
+    except KeyError:
+        print(f"Bolus '{args.bolus_id}' not found.", file=sys.stderr)
+        sys.exit(1)
+    print(f"Appended to: {args.bolus_id}")
+
+
+# ─── Compile command ─────────────────────────────────────────────
+
+
+def _cmd_compile(args) -> None:
+    kf = _load_framework(args.config)
+    try:
+        result = kf.compile(agent=args.agent)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    ep = result["episodes_processed"]
+    facts = result["facts_extracted"]
+    errors = result["errors"]
+
+    print(f"Compiled: {ep} episode(s), {facts} fact(s) staged.")
+    if errors:
+        print(f"Errors ({len(errors)}):", file=sys.stderr)
+        for e in errors:
+            print(f"  {e}", file=sys.stderr)
+    if facts > 0:
+        print("Review with: anamnesis curation list")
+
+
+# ─── Curation commands ───────────────────────────────────────────
+
+
+def _cmd_curation(args) -> None:
+    if args.curation_command is None:
+        print("Usage: anamnesis curation {list,confirm,reject,defer}", file=sys.stderr)
+        sys.exit(1)
+
+    dispatch = {
+        "list": _curation_list,
+        "confirm": _curation_confirm,
+        "reject": _curation_reject,
+        "defer": _curation_defer,
+    }
+    dispatch[args.curation_command](args)
+
+
+def _curation_list(args) -> None:
+    kf = _load_framework(args.config)
+    try:
+        items = kf.get_curation_queue(limit=args.limit)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.as_json:
+        print(json.dumps(items, indent=2, default=str))
+        return
+
+    if not items:
+        print("Curation queue is empty.")
+        return
+
+    for item in items:
+        bolus = item.get("suggested_bolus") or "—"
+        conf = item.get("confidence", 0.0)
+        agent = item.get("source_agent") or "—"
+        print(f"  [{item['id']:4d}] [{conf:.1f}] {item['fact'][:70]}")
+        print(f"         → {bolus}  (from {agent})")
+
+
+def _curation_confirm(args) -> None:
+    kf = _load_framework(args.config)
+    try:
+        kf.confirm(args.item_id, args.bolus_id)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except KeyError:
+        print(f"Curation item {args.item_id} not found.", file=sys.stderr)
+        sys.exit(1)
+    print(f"Confirmed #{args.item_id} → {args.bolus_id}")
+
+
+def _curation_reject(args) -> None:
+    kf = _load_framework(args.config)
+    try:
+        kf.reject(args.item_id)
+    except (RuntimeError, KeyError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Rejected #{args.item_id}")
+
+
+def _curation_defer(args) -> None:
+    kf = _load_framework(args.config)
+    try:
+        kf.defer(args.item_id)
+    except (RuntimeError, KeyError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Deferred #{args.item_id}")
 
 
 # ─── Agent commands ──────────────────────────────────────────────

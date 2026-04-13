@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 
 @dataclass
 class Turn:
     """A single conversation turn within an episode."""
 
-    role: str  # "user" | "assistant" | "system" | "tool"
+    role: Literal["user", "assistant", "system", "tool"]
     content: str
     timestamp: str  # ISO 8601
     sequence: int = 0

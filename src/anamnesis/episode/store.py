@@ -150,6 +150,28 @@ class EpisodeStore:
             )
             return cursor.rowcount
 
+    def list_uncompiled(self, agent: str | None = None) -> list[str]:
+        """Return session_ids of episodes not yet compiled, oldest first."""
+        if agent:
+            rows = self._conn.execute(
+                "SELECT session_id FROM episodes WHERE compiled = 0 AND agent = ? "
+                "ORDER BY started ASC",
+                (agent,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT session_id FROM episodes WHERE compiled = 0 ORDER BY started ASC"
+            ).fetchall()
+        return [r[0] for r in rows]
+
+    def mark_compiled(self, session_id: str) -> None:
+        """Mark an episode as compiled."""
+        with self._conn:
+            self._conn.execute(
+                "UPDATE episodes SET compiled = 1 WHERE session_id = ?",
+                (session_id,),
+            )
+
     def close(self) -> None:
         """Close the database connection."""
         self._conn.close()

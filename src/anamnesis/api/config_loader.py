@@ -41,6 +41,15 @@ def load_config(config_path: str | Path | None = None) -> KnowledgeConfig:
         if key in data and isinstance(data[key], str):
             data[key] = Path(data[key])
 
+    # Flatten nested completion_provider block
+    if "completion_provider" in data:
+        cp = data.pop("completion_provider") or {}
+        if isinstance(cp, dict):
+            data.setdefault("completion_provider_type", cp.get("type"))
+            data.setdefault("completion_provider_base_url", cp.get("base_url"))
+            data.setdefault("completion_provider_model", cp.get("model"))
+            data.setdefault("completion_provider_api_key", cp.get("api_key"))
+
     # Strip fields that aren't KnowledgeConfig parameters
     import dataclasses
     valid_fields = {f.name for f in dataclasses.fields(KnowledgeConfig)}

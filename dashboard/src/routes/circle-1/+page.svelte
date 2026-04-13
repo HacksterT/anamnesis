@@ -77,31 +77,7 @@
 {/if}
 
 <style>
-	.page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 24px;
-	}
-
-	h2 {
-		font-size: 1.4rem;
-		font-weight: 600;
-	}
-
-	.error-banner {
-		background: rgba(248, 113, 113, 0.1);
-		border: 1px solid var(--danger);
-		color: var(--danger);
-		padding: 12px 16px;
-		border-radius: var(--radius);
-		margin-bottom: 16px;
-		font-size: 0.9rem;
-	}
-
-	.muted {
-		color: var(--text-muted);
-	}
+	/* .page-header, .error-banner, .muted, .btn-primary — defined in app.css */
 
 	.metrics-bar {
 		background: var(--bg-surface);
@@ -176,17 +152,4 @@
 		color: var(--text);
 	}
 
-	.btn-primary {
-		background: var(--accent);
-		color: white;
-		border: none;
-		padding: 8px 16px;
-		border-radius: var(--radius);
-		font-size: 0.85rem;
-		font-weight: 500;
-	}
-
-	.btn-primary:hover {
-		background: var(--accent-hover);
-	}
 </style>

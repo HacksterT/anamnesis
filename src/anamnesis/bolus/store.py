@@ -143,3 +143,17 @@ class MarkdownBolusStore(BolusStore):
         self._path(bolus_id).write_text(
             frontmatter.dump(meta, body), encoding="utf-8"
         )
+
+    def append(self, bolus_id: str, content: str, separator: str = "\n\n---\n\n") -> None:
+        """Append content to an existing bolus, preserving existing content and metadata."""
+        validate_bolus_id(bolus_id)
+        try:
+            text = self._path(bolus_id).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise KeyError(f"Bolus {bolus_id!r} not found.")
+        meta, body = frontmatter.parse(text)
+        meta["updated"] = date.today().isoformat()
+        new_body = body + separator + content if body.strip() else content
+        self._path(bolus_id).write_text(
+            frontmatter.dump(meta, new_body), encoding="utf-8"
+        )

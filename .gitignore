@@ -12,3 +12,21 @@ build/
 .ruff_cache/
 .pytest_cache/
 .DS_Store
+
+# SQLite database (contains personal conversation data)
+anamnesis.db
+anamnesis.db-shm
+anamnesis.db-wal
+
+# Local project config (copy anamnesis.example.yaml to get started)
+anamnesis.yaml
+
+# Personal knowledge base — boluses are private by default
+# Example boluses live in examples/boluses/
+knowledge/boluses/*.md
+knowledge/anamnesis.md
+
+# Internal/personal docs
+docs/research/
+docs/selah-strategy/
+

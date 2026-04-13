@@ -8,6 +8,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from anamnesis.config import KnowledgeConfig
+from anamnesis.exceptions import BolusExistsError, BolusNotFoundError, CircleNotConfiguredError
 from anamnesis.framework import KnowledgeFramework
 
 
@@ -26,7 +27,20 @@ class BolusCreate(BaseModel):
 
 class BolusUpdate(BaseModel):
     content: str
+
+
+class BolusUpsert(BaseModel):
+    content: str
+    title: str | None = None
     summary: str | None = None
+    render: str = "reference"
+    priority: int = 50
+    tags: list[str] = []
+
+
+class BolusAppend(BaseModel):
+    content: str
+    separator: str = "\n\n---\n\n"
 
 
 class HealthResponse(BaseModel):
@@ -42,6 +56,19 @@ class TurnCapture(BaseModel):
 class SessionEnd(BaseModel):
     summary: str | None = None
     agent: str | None = None
+
+
+class CurationStage(BaseModel):
+    fact: str
+    suggested_bolus: str | None = None
+    confidence: float = 0.5
+    agent: str | None = None
+    source_url: str | None = None
+    source_episode: str | None = None
+
+
+class CurationConfirm(BaseModel):
+    bolus_id: str
 
 
 class AgentCreate(BaseModel):
@@ -131,7 +158,7 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
     async def get_bolus(bolus_id: str):
         try:
             metadata, content = kf.store.read_full(bolus_id)
-        except KeyError:
+        except (KeyError, BolusNotFoundError):
             raise HTTPException(status_code=404, detail=f"Bolus '{bolus_id}' not found")
         return {"id": bolus_id, "metadata": metadata, "content": content}
 
@@ -147,19 +174,37 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
                 priority=body.priority,
                 tags=body.tags,
             )
+        except BolusExistsError as e:
+            raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
-            if "already exists" in str(e):
-                raise HTTPException(status_code=409, detail=str(e))
             raise HTTPException(status_code=422, detail=str(e))
         return {"id": body.id, "status": "created"}
 
     @app.put("/v1/knowledge/boluses/{bolus_id}")
-    async def update_bolus(bolus_id: str, body: BolusUpdate):
+    async def upsert_bolus(bolus_id: str, body: BolusUpsert, response: Response):
         try:
-            kf.update_bolus(bolus_id, body.content)
-        except KeyError:
+            result = kf.upsert_bolus(
+                bolus_id,
+                body.content,
+                title=body.title,
+                summary=body.summary,
+                render=body.render,
+                priority=body.priority,
+                tags=body.tags,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        if result == "created":
+            response.status_code = 201
+        return {"id": bolus_id, "status": result}
+
+    @app.post("/v1/knowledge/boluses/{bolus_id}/append")
+    async def append_bolus(bolus_id: str, body: BolusAppend):
+        try:
+            kf.append_bolus(bolus_id, body.content, body.separator)
+        except (KeyError, BolusNotFoundError):
             raise HTTPException(status_code=404, detail=f"Bolus '{bolus_id}' not found")
-        return {"id": bolus_id, "status": "updated"}
+        return {"id": bolus_id, "status": "appended"}
 
     @app.delete("/v1/knowledge/boluses/{bolus_id}")
     async def delete_bolus(bolus_id: str):
@@ -172,7 +217,7 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
     async def activate_bolus(bolus_id: str):
         try:
             kf.set_bolus_active(bolus_id, True)
-        except KeyError:
+        except (KeyError, BolusNotFoundError):
             raise HTTPException(status_code=404, detail=f"Bolus '{bolus_id}' not found")
         return {"id": bolus_id, "active": True}
 
@@ -180,7 +225,7 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
     async def deactivate_bolus(bolus_id: str):
         try:
             kf.set_bolus_active(bolus_id, False)
-        except KeyError:
+        except (KeyError, BolusNotFoundError):
             raise HTTPException(status_code=404, detail=f"Bolus '{bolus_id}' not found")
         return {"id": bolus_id, "active": False}
 
@@ -191,7 +236,7 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
         """The retrieve_knowledge tool endpoint. Returns bolus content as plain text."""
         try:
             content = kf.retrieve(bolus_id)
-        except KeyError:
+        except (KeyError, BolusNotFoundError):
             raise HTTPException(status_code=404, detail=f"Bolus '{bolus_id}' not found")
         return Response(content=content, media_type="text/markdown")
 
@@ -234,6 +279,70 @@ def create_app(config: KnowledgeConfig, config_path: str | None = None) -> FastA
                 for t in episode.turns
             ],
         }
+
+    # ─── Compilation pipeline ────────────────────────────────────
+
+    @app.post("/v1/compile")
+    async def compile_episodes(agent: str | None = None):
+        try:
+            result = kf.compile(agent=agent)
+        except RuntimeError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        return result
+
+    # ─── Circle 3: Curation queue ───────────────────────────────
+
+    @app.get("/v1/curation")
+    async def list_curation(limit: int = 50):
+        try:
+            return kf.get_curation_queue(limit=limit)
+        except RuntimeError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    @app.post("/v1/curation", status_code=201)
+    async def stage_fact(body: CurationStage):
+        try:
+            item_id = kf.stage(
+                body.fact,
+                source_episode=body.source_episode,
+                source_agent=body.agent,
+                source_url=body.source_url,
+                suggested_bolus=body.suggested_bolus,
+                confidence=body.confidence,
+            )
+        except RuntimeError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        return {"id": item_id, "status": "staged"}
+
+    @app.post("/v1/curation/{item_id}/confirm")
+    async def confirm_item(item_id: int, body: CurationConfirm):
+        try:
+            kf.confirm(item_id, body.bolus_id)
+        except RuntimeError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Curation item {item_id} not found")
+        return {"id": item_id, "status": "confirmed", "bolus_id": body.bolus_id}
+
+    @app.post("/v1/curation/{item_id}/reject")
+    async def reject_item(item_id: int):
+        try:
+            kf.reject(item_id)
+        except RuntimeError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Curation item {item_id} not found")
+        return {"id": item_id, "status": "rejected"}
+
+    @app.post("/v1/curation/{item_id}/defer")
+    async def defer_item(item_id: int):
+        try:
+            kf.defer(item_id)
+        except RuntimeError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Curation item {item_id} not found")
+        return {"id": item_id, "status": "deferred"}
 
     # ─── Agent registry ─────────────────────────────────────────
 

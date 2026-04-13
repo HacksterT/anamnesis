@@ -71,6 +71,7 @@ code, pre {
 
 .muted {
 	color: var(--text-muted);
+	font-size: 0.9rem;
 }
 
 .create-form {
@@ -98,6 +99,7 @@ code, pre {
 	border-radius: var(--radius);
 	font-size: 0.85rem;
 	font-weight: 500;
+	flex-shrink: 0;
 }
 
 .btn-primary:hover {

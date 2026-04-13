@@ -1,0 +1,55 @@
+# Anamnesis — Project Configuration
+#
+# Copy this file to anamnesis.yaml and adjust for your project.
+# Run: anamnesis init  to create the directory structure.
+
+# ── Core paths ───────────────────────────────────────────────────
+# circle1_path: where to write the assembled injection file
+circle1_path: knowledge/anamnesis.md
+
+# circle2_root: directory containing your bolus files (.md with frontmatter)
+circle2_root: knowledge/boluses
+
+# circle1_max_tokens: soft token ceiling for the assembled injection (default: 4000)
+circle1_max_tokens: 4000
+
+# ── Circle 4: Episode capture ────────────────────────────────────
+# circle4_root: directory where anamnesis.db will be created
+# Required for: episode capture, recency pipeline, compilation pipeline
+circle4_root: .
+
+# circle4_retention_days: how long to keep episodes (null = keep forever)
+circle4_retention_days: null
+
+# ── Recency pipeline ─────────────────────────────────────────────
+# recency_budget: token budget carved out for the _recency bolus (0 = disabled)
+recency_budget: 400
+
+# ── Completion provider (for compilation pipeline) ────────────────
+# Required for: anamnesis compile  (Circle 4 → Circle 3 fact extraction)
+# Supports any OpenAI-compatible endpoint (Ollama, LM Studio, OpenAI, etc.)
+#
+# completion_provider:
+#   type: openai_compatible
+#   base_url: http://localhost:11434/v1   # Ollama default
+#   model: gemma4:27b                    # or llama3.2, qwen2.5, etc.
+#   api_key: null                        # null for local models
+
+# ── REST API ─────────────────────────────────────────────────────
+# api_host: 127.0.0.1
+# api_port: 8741
+# api_key: null   # set to a string to require Bearer token auth
+
+# ── Agent profiles ───────────────────────────────────────────────
+# Each agent can have its own bolus activation list and recency budget.
+# Boluses listed under active_boluses are activated for that agent even
+# if their default active: false. All other boluses use their default state.
+#
+# agents:
+#   my-agent:
+#     token_budget: 4000
+#     recency_budget: 400
+#     active_boluses:
+#       - coding-preferences
+#       - project-context
+agents: {}

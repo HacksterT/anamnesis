@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from dataclasses import dataclass, field
+from typing import Literal, Protocol, runtime_checkable
 
 from anamnesis.inject.schema import TOKEN_HARD_CEILING, TOKEN_SOFT_MAX_DEFAULT
 
@@ -36,7 +36,10 @@ class BudgetResult:
     token_count: int
     soft_max: int
     hard_ceiling: int
-    status: str  # "ok" | "warning" | "exceeded"
+    status: Literal["ok", "warning", "exceeded"]
+    # Bolus counts populated by assembler to avoid a second store.list() call
+    total_boluses: int = field(default=0)
+    active_boluses: int = field(default=0)
 
     @property
     def utilization_pct(self) -> float:

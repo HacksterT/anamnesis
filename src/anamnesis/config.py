@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 
 @dataclass
@@ -20,7 +21,7 @@ class KnowledgeConfig:
     circle1_max_tokens: int = 4000
 
     # Storage backend discriminator (kept as string for serialization)
-    bolus_store: str = "markdown"
+    bolus_store: Literal["markdown"] = "markdown"
 
     # Circle 4 (episode capture)
     circle4_root: Path | None = None
@@ -28,6 +29,12 @@ class KnowledgeConfig:
 
     # Recency pipeline
     recency_budget: int = 0
+
+    # Completion provider (for compilation pipeline)
+    completion_provider_type: str | None = None   # "openai_compatible" | None
+    completion_provider_base_url: str | None = None
+    completion_provider_model: str | None = None
+    completion_provider_api_key: str | None = None
 
     # API server settings
     api_host: str = "127.0.0.1"

@@ -52,6 +52,18 @@ export interface AgentConfig {
 	knowledge_dir?: string;
 }
 
+export interface CurationItem {
+	id: number;
+	fact: string;
+	source_episode: string | null;
+	source_agent: string | null;
+	source_url: string | null;
+	suggested_bolus: string | null;
+	confidence: number;
+	status: 'pending' | 'confirmed' | 'rejected' | 'deferred';
+	created: string;
+}
+
 // ─── Injection ──────────────────────────────────────────────────
 
 export async function getInjection(): Promise<string> {
@@ -104,6 +116,37 @@ export async function updateBolus(id: string, content: string): Promise<void> {
 	if (!res.ok) throw new Error(`Failed to update bolus '${id}'`);
 }
 
+export async function upsertBolus(
+	id: string,
+	data: { content: string; title?: string; summary?: string; render?: string; priority?: number; tags?: string[] }
+): Promise<'created' | 'updated'> {
+	const res = await request(`/v1/knowledge/boluses/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		const err = await res.json();
+		throw new Error(err.detail || `Failed to upsert bolus '${id}'`);
+	}
+	const body = await res.json();
+	return body.status;
+}
+
+export async function appendBolus(
+	id: string,
+	content: string,
+	separator = '\n\n---\n\n'
+): Promise<void> {
+	const res = await request(`/v1/knowledge/boluses/${id}/append`, {
+		method: 'POST',
+		body: JSON.stringify({ content, separator })
+	});
+	if (!res.ok) {
+		const err = await res.json();
+		throw new Error(err.detail || `Failed to append to bolus '${id}'`);
+	}
+}
+
 export async function deleteBolus(id: string): Promise<void> {
 	const res = await request(`/v1/knowledge/boluses/${id}`, { method: 'DELETE' });
 	if (!res.ok) throw new Error(`Failed to delete bolus '${id}'`);
@@ -115,6 +158,51 @@ export async function activateBolus(id: string): Promise<void> {
 
 export async function deactivateBolus(id: string): Promise<void> {
 	await request(`/v1/knowledge/boluses/${id}/deactivate`, { method: 'PATCH' });
+}
+
+// ─── Curation queue ─────────────────────────────────────────────
+
+export async function getCurationQueue(limit = 50): Promise<CurationItem[]> {
+	const res = await request(`/v1/curation?limit=${limit}`);
+	if (!res.ok) throw new Error('Failed to load curation queue');
+	return res.json();
+}
+
+export async function stageFact(data: {
+	fact: string;
+	suggested_bolus?: string;
+	confidence?: number;
+	agent?: string;
+	source_url?: string;
+}): Promise<number> {
+	const res = await request('/v1/curation', {
+		method: 'POST',
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		const err = await res.json();
+		throw new Error(err.detail || 'Failed to stage fact');
+	}
+	const body = await res.json();
+	return body.id;
+}
+
+export async function confirmItem(id: number, bolusId: string): Promise<void> {
+	const res = await request(`/v1/curation/${id}/confirm`, {
+		method: 'POST',
+		body: JSON.stringify({ bolus_id: bolusId })
+	});
+	if (!res.ok) throw new Error(`Failed to confirm item ${id}`);
+}
+
+export async function rejectItem(id: number): Promise<void> {
+	const res = await request(`/v1/curation/${id}/reject`, { method: 'POST' });
+	if (!res.ok) throw new Error(`Failed to reject item ${id}`);
+}
+
+export async function deferItem(id: number): Promise<void> {
+	const res = await request(`/v1/curation/${id}/defer`, { method: 'POST' });
+	if (!res.ok) throw new Error(`Failed to defer item ${id}`);
 }
 
 // ─── Health ─────────────────────────────────────────────────────

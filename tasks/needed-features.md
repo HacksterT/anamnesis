@@ -6,88 +6,87 @@ Last updated: 2026-04-12
 
 ## 1. CLI Tool (Agent Interface) — DONE
 
-Implemented in F01-S06. All commands working: `init`, `serve`, `assemble`, `validate`, `metrics`, `bolus` group (list/show/create/update/delete/activate/deactivate), `agent` group (list/show/recency). JSON output mode. argparse-based, zero extra dependencies.
+Implemented in F01-S06. All commands working: `init`, `serve`, `assemble`, `validate`, `metrics`, `bolus` group (list/show/create/update/delete/activate/deactivate/append), `agent` group (list/show/recency), `curation` group (list/confirm/reject/defer), `compile`.
 
 **Remaining gaps:**
-- `anamnesis bolus create` requires `--file` or stdin — no interactive editor mode
+- No `anamnesis curation stage` CLI command (currently must use REST or library directly)
 - No `anamnesis bolus edit` command (open in $EDITOR)
 
 ---
 
-## 2. Web Dashboard (Human Interface) — DONE (core)
+## 2. Web Dashboard (Human Interface) — DONE (core + Circle 3)
 
-Implemented in F01-S07, restructured with five-circle navigation. SvelteKit + dark theme.
+Implemented in F01-S07 (core), updated through F04-S03.
 
 **What's working:**
-- Framework landing page with concentric circles diagram and design principles
-- Circle 1: Core — injection preview with token budget bar
-- Circle 2: Boluses — list, toggle, filter by tag/render mode, create form
-- Circle 4: Episodic — episode list from API
-- Settings — agent registry with recency budget slider
-- Circle 3 and 5 — placeholder pages with feature descriptions
+- Framework landing page with concentric circles diagram
+- Circle 1: Injection preview with token budget bar
+- Circle 2: Boluses — list, toggle, filter, create form
+- Circle 3: Curation queue — confirm/reject/defer, Stage Fact form
+- Circle 4: Episode list
+- Settings: Agent registry with recency budget slider
 
 **Remaining gaps:**
 - Click-to-edit bolus content (markdown editor) — currently view-only
 - Sort controls on bolus list (by name, date, priority)
 - "Assemble now" button on Circle 1 page
-- Bolus detail/edit page (separate route, not just the list card)
-- Dashboard CSS cleanup (some duplicated styles in Circle 1 and Settings pages)
+- Circle 5 — placeholder only
 
 ---
 
-## 3. Agent Onboarding — PARTIAL
+## 3. Agent Onboarding — DONE
 
-Basic agent registration works via CLI and API. Agents are stored in `anamnesis.yaml`.
+Per-agent bolus profiles, injection routing, and recency isolation all implemented in F03-S01/S02.
 
 **What's working:**
-- `anamnesis init --agent <name>` registers with token/recency budgets
-- `GET/POST/PATCH/DELETE /v1/agents` — full CRUD
-- Dashboard shows agents with recency slider
+- `GET /v1/knowledge/injection?agent=ezra` returns Ezra-specific injection
+- Per-agent `_recency-{name}` boluses — agents don't overwrite each other
+- Agent profiles stored in `anamnesis.yaml` under `agents:`
 
-**Remaining gaps (significant):**
-- **Per-agent bolus activation profiles.** All agents currently see all active boluses. There's no way for Atlas to activate coding boluses while Selah activates theology boluses from the same library. This needs a per-agent activation overlay.
-- **Per-agent injection routing.** `GET /v1/knowledge/injection` returns the same injection for all agents. Needs `?agent=atlas` parameter that applies the agent's activation profile and recency budget.
-- **Per-agent recency isolation.** Currently one `_recency` bolus shared across all agents. If Atlas and Selah both end sessions, they overwrite each other's recency. Need `_recency-atlas` and `_recency-selah` system boluses.
+**No remaining gaps** for the core multi-agent use case.
 
 ---
 
 ## 4. Conversation Capture & Recency Pipeline — DONE
 
-Implemented in F02. SQLite episode storage, CompletionProvider protocol, heuristic summarizer, recency pipeline with FIFO and budget carve-out.
+Implemented in F02. SQLite episode storage, CompletionProvider protocol, recency pipeline.
 
-**No remaining gaps** for the core pipeline. The compilation slow path (Circle 4 → Circle 3) is Phase 3 — a separate feature.
-
----
-
-## 5. Memory Migration Tooling — DEFERRED
-
-Covered in the Atlas integration PRD as a manual curation process rather than an automated migration tool. The `anamnesis migrate` CLI command is not needed for the initial Atlas onboarding since the human should review each memory before it becomes a bolus.
-
-If automated migration becomes necessary later (e.g., bulk onboarding of many agents with existing memories), it can be scoped then.
+**No remaining gaps.**
 
 ---
 
-## 6. Technical Debt & Deferred Improvements — NOT STARTED
+## 5. Compilation Pipeline (Circle 4 → Circle 3) — DONE
 
-All items from the simplify pass are still outstanding:
+Implemented in F03-S04. `kf.compile()`, `POST /v1/compile`, `anamnesis compile [--agent]`.
+Uses `OpenAICompatibleProvider` (Ollama/Gemma 4 locally).
 
-- **Custom exception types** — `BolusExistsError`, `BolusNotFoundError`, `CircleNotConfiguredError`
-- **Literal types** for string discriminators (`status`, `bolus_store`, `role`, `render`)
-- **`turn_count` as derived property** on Episode
-- **Dashboard CSS cleanup** — complete shared style extraction
-- **`BolusUpdate` dead field** — wire `summary` through or remove
-- **Assembler double-scan in metrics** — avoid redundant bolus reads
+**No remaining gaps.**
 
 ---
 
-## Summary: What Needs a PRD
+## 6. Technical Debt — DONE
 
-| Item | Priority | Scope |
+Completed in F03-S05:
+- Domain exceptions (`BolusExistsError`, `BolusNotFoundError`, `CircleNotConfiguredError`)
+- `Literal` types on `BudgetResult.status`, `Turn.role`, `KnowledgeConfig.bolus_store`
+- Assembler single-scan (bolus counts on `BudgetResult`)
+- Dashboard CSS consolidated in `app.css`
+
+---
+
+## 7. Memory Migration Tooling — DEFERRED
+
+Manual curation process preferred over automated migration. Revisit if bulk onboarding becomes necessary.
+
+---
+
+## Summary: What's Next
+
+| Item | Priority | Phase |
 |------|----------|-------|
-| Per-agent profiles + injection routing | High | Enables Atlas + Selah on shared knowledge base |
-| Compilation pipeline (Circle 4 → Circle 3) | High | Phase 3 per build order |
-| Technical debt cleanup | Medium | Housekeeping before codebase grows |
-| Dashboard enhancements (edit, sort, assemble button) | Medium | UX improvements |
-| Dashboard CSS cleanup | Low | Cosmetic |
-
-The per-agent profiles are the critical gap for the personal multi-agent use case (Atlas + Selah sharing one knowledge base). This should be addressed before or alongside the compilation pipeline.
+| `anamnesis curation stage` CLI command | Low | Backlog |
+| Bolus click-to-edit in dashboard | Medium | Dashboard UX |
+| "Assemble now" button on Circle 1 | Low | Dashboard UX |
+| Circle 3 → Circle 2 reconciliation (permissiveness slider, auto-promote) | High | Phase 5 per build order |
+| Circle 5: Behavioral mining | Low | Phase 6 |
+| Vector search | Low | Phase 7 (only if needed) |
