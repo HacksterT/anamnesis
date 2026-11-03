@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getInjection, getInjectionMetrics, type InjectionMetrics } from '$lib/api';
+	import { getInjection, getInjectionMetrics, type InjectionMetrics } from '#lib/api.js';
 
 	let injection = $state('');
 	let metrics = $state<InjectionMetrics | null>(null);
