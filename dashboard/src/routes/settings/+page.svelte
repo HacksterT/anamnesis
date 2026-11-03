@@ -7,7 +7,7 @@
 		deleteAgent,
 		getHealth,
 		type AgentConfig
-	} from '$lib/api';
+	} from '#lib/api.js';
 
 	let agents = $state<Record<string, AgentConfig>>({});
 	let connected = $state(false);

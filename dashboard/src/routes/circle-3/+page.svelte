@@ -7,7 +7,7 @@
 		rejectItem,
 		deferItem,
 		type CurationItem
-	} from '$lib/api';
+	} from '#lib/api.js';
 
 	let items = $state<CurationItem[]>([]);
 	let loading = $state(true);

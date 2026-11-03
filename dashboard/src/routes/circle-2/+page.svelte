@@ -7,7 +7,7 @@
 		deleteBolus,
 		createBolus,
 		type BolusMetadata
-	} from '$lib/api';
+	} from '#lib/api.js';
 
 	let boluses = $state<BolusMetadata[]>([]);
 	let showAll = $state(false);

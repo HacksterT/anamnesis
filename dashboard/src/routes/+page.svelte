@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getHealth } from '$lib/api';
+	import { getHealth } from '#lib/api.js';
 
 	let connected = $state(false);
 	let version = $state('');
